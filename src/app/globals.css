@@ -1010,30 +1010,35 @@ body {
   color: var(--color-paper-white);
 }
 
-/* Distinct color accents based on shift role */
+/* Distinct background colors & accent borders based on shift role */
 .shift-block-role-kitchen.shift-block-covered {
+  background: #1b4332;
+  color: #fcfcfc;
   border-left: 4px solid #74c69d;
 }
 
 .shift-block-role-server.shift-block-covered {
+  background: #0d2818;
+  color: #fcfcfc;
   border-left: 4px solid var(--color-chartreuse-lime);
 }
 
 .shift-block-role-bartender.shift-block-covered {
+  background: #2d3142;
+  color: #fcfcfc;
   border-left: 4px solid #ef8354;
 }
 
 .shift-block-role-manager.shift-block-covered {
+  background: #2b2d42;
+  color: #fcfcfc;
   border-left: 4px solid #8d99ae;
 }
 
-/* Distinct background colors for different assigned workers */
-.shift-block-worker-0.shift-block-covered { background: #043f2e; color: #fcfcfc; }
-.shift-block-worker-1.shift-block-covered { background: #1e3a8a; color: #fcfcfc; }
-.shift-block-worker-2.shift-block-covered { background: #4c1d95; color: #fcfcfc; }
-.shift-block-worker-3.shift-block-covered { background: #701a75; color: #fcfcfc; }
-.shift-block-worker-4.shift-block-covered { background: #134e4a; color: #fcfcfc; }
-.shift-block-worker-5.shift-block-covered { background: #312e81; color: #fcfcfc; }
+.shift-block-role-default.shift-block-covered {
+  background: var(--color-deep-forest);
+  color: var(--color-paper-white);
+}
 
 /* An unfilled shift is the problem this product solves — it reads as a hole. */
 .shift-block-open {
