@@ -300,26 +300,53 @@ export function ScheduleView() {
         </div>
       </header>
 
-      <section className="coverage-strip" aria-label="Coverage summary">
-        <div className="coverage-stat">
-          <span className="coverage-value">{visibleShifts.length}</span>
-          <span className="coverage-label">shifts</span>
+      <section className="summary" aria-label="Coverage summary">
+        <div className="summary-counts">
+          <span className="summary-count">
+            <strong>{visibleShifts.length}</strong> shifts
+          </span>
+          <span className="summary-count">
+            <strong>{covered}</strong> covered
+          </span>
+          {filling > 0 && (
+            <span className="summary-count summary-count-filling">
+              <strong>{filling}</strong> finding cover
+            </span>
+          )}
+          <span className={`summary-count${unfilled > 0 ? " summary-count-open" : ""}`}>
+            <strong>{unfilled}</strong> unfilled
+          </span>
+          <span className="summary-zone">
+            {formatZoneAbbreviation(new Date().toISOString(), timeZone)}
+          </span>
         </div>
-        <div className="coverage-stat">
-          <span className="coverage-value">{covered}</span>
-          <span className="coverage-label">covered</span>
-        </div>
-        {filling > 0 && (
-          <div className="coverage-stat coverage-stat-filling">
-            <span className="coverage-value">{filling}</span>
-            <span className="coverage-label">finding cover</span>
-          </div>
+
+        {problemSlots.length > 0 && (
+          <ul className="summary-gaps">
+            {problemSlots.map((shift) => (
+              <li key={shift.id} className="summary-gap">
+                <button className="summary-gap-slot" onClick={() => setSelectedId(shift.id)}>
+                  <span className="summary-gap-tag">Unfilled</span>
+                  <span className="summary-gap-when">
+                    {new Intl.DateTimeFormat("en-GB", { timeZone, weekday: "short", day: "numeric", month: "short" }).format(new Date(shift.startsAt))}
+                    {" · "}
+                    {formatRange(shift.startsAt, shift.endsAt, timeZone)}
+                  </span>
+                  <span className="summary-gap-role">{shift.role}</span>
+                </button>
+                {data.canManage && (
+                  <button
+                    className="btn btn-primary btn-sm"
+                    disabled={busyId === shift.id || rescue.active}
+                    onClick={() => findCoverage(shift.id)}
+                  >
+                    {busyId === shift.id ? "Starting…" : rescue.active ? "Busy" : "Find coverage"}
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
         )}
-        <div className={`coverage-stat${unfilled > 0 ? " coverage-stat-open" : ""}`}>
-          <span className="coverage-value">{unfilled}</span>
-          <span className="coverage-label">unfilled</span>
-        </div>
-        <p className="coverage-zone">All times {formatZoneAbbreviation(new Date().toISOString(), timeZone)}</p>
       </section>
 
       {error && <p className="notice">{error}</p>}
@@ -385,44 +412,6 @@ export function ScheduleView() {
               </ul>
             </div>
           </div>
-        </section>
-      )}
-
-      {problemSlots.length > 0 && (
-        <section className="attention" aria-label="Shifts needing cover">
-          <div className="attention-head">
-            <h2 className="attention-title">
-              {problemSlots.length === 1
-                ? "1 shift has nobody on it"
-                : `${problemSlots.length} shifts have nobody on them`}
-            </h2>
-            <p className="attention-note">
-              Nothing is dialled until you start it here, or a manager asks by voice.
-            </p>
-          </div>
-          <ul className="attention-list">
-            {problemSlots.map((shift) => (
-              <li key={shift.id} className="attention-row">
-                <button className="attention-slot" onClick={() => setSelectedId(shift.id)}>
-                  <span className="attention-when">
-                    {new Intl.DateTimeFormat("en-GB", { timeZone, weekday: "short", day: "numeric", month: "short" }).format(new Date(shift.startsAt))}
-                    {" · "}
-                    {formatRange(shift.startsAt, shift.endsAt, timeZone)}
-                  </span>
-                  <span className="attention-role">{shift.role}</span>
-                </button>
-                {data.canManage && (
-                  <button
-                    className="btn btn-primary btn-sm"
-                    disabled={busyId === shift.id || rescue.active}
-                    onClick={() => findCoverage(shift.id)}
-                  >
-                    {busyId === shift.id ? "Starting…" : rescue.active ? "Busy" : "Find coverage"}
-                  </button>
-                )}
-              </li>
-            ))}
-          </ul>
         </section>
       )}
 

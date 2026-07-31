@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { WorkflowTimeline } from "@/components/dashboard/WorkflowTimeline";
 import { ProofPanel } from "@/components/dashboard/ProofPanel";
-import { WORKFLOW_STEPS, railStates, statusMeta } from "@/components/dashboard/status";
+import { WORKFLOW_STEPS, railStates, statusMeta, statusTagClass } from "@/components/dashboard/status";
 
 interface Status {
   status: string;
@@ -24,6 +24,7 @@ export function AdminConsole() {
   const [data, setData] = useState<Status | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [confirmingReset, setConfirmingReset] = useState(false);
 
   const load = useCallback(async () => {
     const res = await fetch("/api/status");
@@ -94,7 +95,7 @@ export function AdminConsole() {
       <section className="card">
         <div className="card-head">
           <h2 className="card-title">Rescue state</h2>
-          <span className="status-tag status-tag-active">{meta.label}</span>
+          <span className={statusTagClass(data.status)}>{meta.label}</span>
         </div>
         <ol className="rail-steps">
           {WORKFLOW_STEPS.map((label, index) => (
@@ -170,9 +171,28 @@ export function AdminConsole() {
           <h2 className="card-title">Danger zone</h2>
         </div>
         <p className="empty">Clears the current rescue: timeline, proof IDs and the shift in progress.</p>
-        <button className="btn btn-ghost" disabled={busy} onClick={() => post("/api/reset")}>
-          Reset the current rescue
-        </button>
+        {/* Destructive and irreversible, so it asks first. */}
+        {confirmingReset ? (
+          <div className="hero-actions">
+            <button
+              className="btn btn-primary"
+              disabled={busy}
+              onClick={async () => {
+                await post("/api/reset");
+                setConfirmingReset(false);
+              }}
+            >
+              {busy ? "Resetting…" : "Yes, clear this rescue"}
+            </button>
+            <button className="btn btn-ghost" disabled={busy} onClick={() => setConfirmingReset(false)}>
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <button className="btn btn-ghost" disabled={busy} onClick={() => setConfirmingReset(true)}>
+            Reset the current rescue
+          </button>
+        )}
       </section>
     </main>
   );
