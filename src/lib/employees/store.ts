@@ -10,9 +10,9 @@ const EMPLOYEES_KEY = "shiftrescue:employees";
  */
 function seedRoster(): Employee[] {
   return [
-    { id: "worker-1", name: "Maria Alvarez", phone: process.env.DEMO_WORKER_1_PHONE || "", language: "Spanish", role: "Kitchen Assistant", active: true },
-    { id: "worker-2", name: "Ahmed Khan", phone: process.env.DEMO_WORKER_2_PHONE || "", language: "Urdu", role: "Kitchen Assistant", active: true },
-    { id: "worker-3", name: "John Byrne", phone: process.env.DEMO_WORKER_3_PHONE || "", language: "English", role: "Kitchen Assistant", active: true },
+    { id: "emp_maria", name: "Maria Alvarez", phone: process.env.DEMO_WORKER_1_PHONE || "", language: "Spanish", role: "Kitchen Assistant", active: true },
+    { id: "emp_ahmed", name: "Ahmed Khan", phone: process.env.DEMO_WORKER_2_PHONE || "", language: "Urdu", role: "Kitchen Assistant", active: true },
+    { id: "emp_john", name: "John Byrne", phone: process.env.DEMO_WORKER_3_PHONE || "", language: "English", role: "Kitchen Assistant", active: true },
   ];
 }
 

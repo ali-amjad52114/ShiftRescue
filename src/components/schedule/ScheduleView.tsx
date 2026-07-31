@@ -264,19 +264,30 @@ export function ScheduleView() {
                       <button
                         key={shift.id}
                         className={`shift-block shift-block-${state}${selectedId === shift.id ? " shift-block-selected" : ""}`}
-                        style={{
-                          top: `${top * 100}%`,
-                          height: `${Math.max(6, (bottom - top) * 100)}%`,
-                          left: `calc(${(lane / lanes) * 100}% + 2px)`,
-                          width: `calc(${(1 / lanes) * 100}% - 4px)`,
-                          right: "auto",
-                        }}
+                        style={(() => {
+                          // Equal division makes 3+ overlaps unreadable, so blocks
+                          // keep a minimum width and cascade over each other.
+                          const width = Math.max(1 / lanes, 0.62);
+                          const step = lanes > 1 ? (1 - width) / (lanes - 1) : 0;
+                          return {
+                            top: `${top * 100}%`,
+                            height: `${Math.max(6, (bottom - top) * 100)}%`,
+                            left: `calc(${lane * step * 100}% + 2px)`,
+                            width: `calc(${width * 100}% - 4px)`,
+                            right: "auto",
+                            zIndex: lane + 1,
+                          };
+                        })()}
                         onClick={() => setSelectedId(shift.id === selectedId ? null : shift.id)}
                       >
                         <span className="shift-block-time">{formatTime(shift.startsAt, timeZone)}</span>
                         <span className="shift-block-role">{shift.role}</span>
                         <span className="shift-block-person">
-                          {person ? person.name : isFilling ? rescueLabel(rescue) : "Unfilled"}
+                          {person
+                            ? person.name
+                            : isFilling
+                              ? `Calling ${(rescue.callingName ?? "").split(" ")[0] || "…"}`
+                              : "Unfilled"}
                         </span>
                       </button>
                     );

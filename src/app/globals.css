@@ -902,10 +902,10 @@ body {
 
 .calendar-grid {
   display: grid;
-  grid-template-columns: repeat(7, minmax(116px, 1fr));
+  grid-template-columns: repeat(7, minmax(150px, 1fr));
   gap: var(--spacing-8);
   flex: 1;
-  min-width: 840px;
+  min-width: 1080px;
 }
 
 .calendar-day-head {
@@ -977,7 +977,7 @@ body {
   transition: filter 0.15s ease;
 }
 
-.shift-block:hover { filter: brightness(0.97); }
+.shift-block:hover { filter: brightness(0.97); z-index: 9 !important; }
 
 .shift-block-time {
   font-size: var(--text-caption);
