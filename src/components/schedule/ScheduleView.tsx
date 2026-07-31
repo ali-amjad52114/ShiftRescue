@@ -418,6 +418,25 @@ export function ScheduleView() {
         </section>
       )}
 
+      {visibleShifts.length === 0 && (
+        <section className="calendar-empty-state">
+          <p className="section-lede">
+            {roleFilter === "all"
+              ? "Nothing is scheduled for this week yet."
+              : `No ${roleFilter} shifts are scheduled for this week.`}
+          </p>
+          {data.canManage ? (
+            <button className="btn btn-primary" onClick={() => setEditorFor(null)}>
+              Add the first shift
+            </button>
+          ) : (
+            <a className="btn btn-ghost" href="/login">
+              Sign in to add shifts
+            </a>
+          )}
+        </section>
+      )}
+
       <section className="calendar" aria-label="Week schedule">
         <div className="calendar-hours" aria-hidden="true">
           {Array.from({ length: DAY_END - DAY_START + 1 }, (_, i) => (
