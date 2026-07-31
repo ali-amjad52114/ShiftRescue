@@ -11,37 +11,44 @@ interface ProofPanelProps {
 }
 
 export function ProofPanel({ proof }: ProofPanelProps) {
-  const hasProof = Object.keys(proof).length > 0;
+  const rows: Array<{ key: string; value: string }> = [];
+
+  if (proof.callId) rows.push({ key: "Vapi call ID", value: proof.callId });
+  if (proof.scheduleUpdated) rows.push({ key: "Schedule app", value: "shift marked FILLED" });
+  if (proof.calendarEventId) rows.push({ key: "Google Calendar event", value: proof.calendarEventId });
+  if (proof.slackMessageId) rows.push({ key: "Slack message", value: proof.slackMessageId });
+  if (proof.smsMessageId) rows.push({ key: "a1mobile SMS", value: proof.smsMessageId });
 
   return (
-    <div className="glass-card">
-      <h2 className="card-title">🔐 Verification & Side Effect Proof</h2>
-      {!hasProof ? (
-        <div style={{ color: "var(--text-muted)", fontSize: "0.9rem", padding: "0.5rem 0" }}>
-          Proof IDs will appear here once VoiceOS & a1mobile complete side effects.
-        </div>
+    <section className="card">
+      <div className="card-head">
+        <h2 className="card-title">
+          <svg className="card-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6l7-3Z" />
+            <path d="m9 12 2 2 4-4" />
+          </svg>
+          Verified side effects
+        </h2>
+      </div>
+
+      {rows.length === 0 ? (
+        <p className="empty">
+          Nothing verified yet. IDs appear only when VoiceOS and a1mobile report a real side effect back to
+          the backend.
+        </p>
       ) : (
-        <div>
-          {proof.calendarEventId && (
-            <div className="proof-badge">
-              <span className="proof-key">Google Calendar Event ID</span>
-              <span className="proof-val">{proof.calendarEventId}</span>
-            </div>
-          )}
-          {proof.slackMessageId && (
-            <div className="proof-badge">
-              <span className="proof-key">Slack Message ID</span>
-              <span className="proof-val">{proof.slackMessageId}</span>
-            </div>
-          )}
-          {proof.smsMessageId && (
-            <div className="proof-badge">
-              <span className="proof-key">a1mobile SMS ID</span>
-              <span className="proof-val">{proof.smsMessageId}</span>
-            </div>
-          )}
-        </div>
+        <>
+          <div className="proof-list">
+            {rows.map((row) => (
+              <div className="proof-row" key={row.key}>
+                <span className="proof-key">{row.key}</span>
+                <span className="proof-val">{row.value}</span>
+              </div>
+            ))}
+          </div>
+          <p className="proof-note">Every ID is returned by the integration that performed the action.</p>
+        </>
       )}
-    </div>
+    </section>
   );
 }

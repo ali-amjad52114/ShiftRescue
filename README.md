@@ -53,7 +53,7 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000` for the project page or `http://localhost:3000/dashboard` for the dashboard placeholder. Run `npm run typecheck` to verify the shared TypeScript contracts and `npm run build` to create a production build.
+Open `http://localhost:3000` for the live dashboard (`/dashboard` renders the same view). The UI follows the design system in `DESIGN.md`. Run `npm run typecheck` to verify the shared TypeScript contracts and `npm run build` to create a production build.
 
 ## Currently mocked integrations
 

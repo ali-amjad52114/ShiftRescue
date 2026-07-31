@@ -10,25 +10,33 @@ interface WorkflowTimelineProps {
 
 export function WorkflowTimeline({ timeline }: WorkflowTimelineProps) {
   return (
-    <div className="glass-card">
-      <h2 className="card-title">📜 Workflow Timeline</h2>
+    <section className="card">
+      <div className="card-head">
+        <h2 className="card-title">
+          <svg className="card-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M4 6h16M4 12h16M4 18h10" />
+          </svg>
+          Workflow timeline
+        </h2>
+      </div>
+
       {timeline.length === 0 ? (
-        <div style={{ color: "var(--text-muted)", fontSize: "0.9rem", padding: "0.5rem 0" }}>
-          No workflow events recorded yet.
-        </div>
+        <p className="empty">No events yet. Every step of the rescue is logged here as it happens.</p>
       ) : (
-        <ul className="timeline-list">
-          {timeline.map((item) => {
-            const timeStr = new Date(item.timestamp).toLocaleTimeString();
-            return (
-              <li key={item.id} className="timeline-item">
-                <div className="timeline-time">{timeStr}</div>
-                <div className="timeline-msg">{item.message}</div>
-              </li>
-            );
-          })}
+        <ul className="timeline">
+          {timeline.map((item, index) => (
+            <li
+              key={item.id}
+              className={`timeline-item${index === timeline.length - 1 ? " timeline-item-latest" : ""}`}
+            >
+              <div className="timeline-time">
+                <time dateTime={item.timestamp}>{new Date(item.timestamp).toLocaleTimeString()}</time>
+              </div>
+              <div className="timeline-msg">{item.message}</div>
+            </li>
+          ))}
         </ul>
       )}
-    </div>
+    </section>
   );
 }
