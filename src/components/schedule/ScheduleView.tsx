@@ -205,6 +205,44 @@ export function ScheduleView() {
     }
   };
 
+  const assignShift = async (shiftId: string, assignedEmployeeId: string | null) => {
+    setBusyId(shiftId);
+    setError(null);
+    try {
+      const res = await fetch(`/api/shifts/${shiftId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ assignedEmployeeId }),
+      });
+      const json = await res.json();
+      if (!res.ok) setError(json.error ?? "Could not update shift assignment");
+      await load();
+    } catch {
+      setError("Could not update shift assignment");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const markUnfulfilledAndRescue = async (shiftId: string) => {
+    setBusyId(shiftId);
+    setError(null);
+    try {
+      // Unassign first so it reflects as unassigned/open in calendar
+      await fetch(`/api/shifts/${shiftId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ assignedEmployeeId: null }),
+      });
+      // Then launch rescue workflow
+      await findCoverage(shiftId);
+    } catch {
+      setError("Could not unassign and start rescue");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const shortDay = (key: string) =>
     new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", day: "numeric", month: "short" }).format(new Date(`${key}T00:00:00Z`));
   const weekLabel = `${shortDay(days[0].key)} – ${shortDay(days[6].key)}`;
@@ -228,14 +266,6 @@ export function ScheduleView() {
               ))}
             </select>
           </label>
-          {data.canManage && (
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={() => setEditorFor(null)}
-            >
-              Add shift
-            </button>
-          )}
           <button className="btn btn-ghost btn-sm" onClick={() => setWeekOffset((w) => w - 1)} aria-label="Previous week">
             ‹
           </button>
@@ -250,12 +280,28 @@ export function ScheduleView() {
               Today
             </button>
           )}
+          {data.canManage && (
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() =>
+                setEditorFor({
+                  role: roles[0] || "Server",
+                  startsAt: new Date(now.getTime() + 2 * 3600 * 1000).toISOString(),
+                  endsAt: new Date(now.getTime() + 10 * 3600 * 1000).toISOString(),
+                  pay: "$22 per hour",
+                  assignedEmployeeId: null,
+                })
+              }
+            >
+              + Shift
+            </button>
+          )}
         </div>
       </header>
 
       <section className="coverage-strip" aria-label="Coverage summary">
         <div className="coverage-stat">
-          <span className="coverage-value">{weekShifts.length}</span>
+          <span className="coverage-value">{visibleShifts.length}</span>
           <span className="coverage-label">shifts</span>
         </div>
         <div className="coverage-stat">
@@ -290,33 +336,17 @@ export function ScheduleView() {
         />
       )}
 
-      {rescue.active && (
-        <section className="live" aria-label="Live coverage call" aria-live="polite">
-          <div className="live-head">
-            <span className="live-pill">
+      {rescue.active && rescue.timeline.length > 0 && (
+        <section className="live-timeline" aria-label="Active rescue progress">
+          <div className="live-timeline-head">
+            <div className="live-pill">
               <span className="live-dot" />
-              Live
-            </span>
-            <span className="live-shift">
-              {(() => {
-                const target = data.shifts.find((s) => s.id === rescue.shiftId);
-                if (!target) return "Finding cover";
-                return `${target.role} · ${new Intl.DateTimeFormat("en-GB", { timeZone, weekday: "short", day: "numeric", month: "short" }).format(new Date(target.startsAt))} ${formatRange(target.startsAt, target.endsAt, timeZone)}`;
-              })()}
-            </span>
+              <span>Rescue in progress</span>
+            </div>
+            <span className="live-status">{rescue.status.replace(/_/g, " ")}</span>
           </div>
-
-          <p className="live-headline">
-            {rescue.callingName
-              ? `Calling ${rescue.callingName}`
-              : rescue.confirmedBySms
-                ? "Cover confirmed"
-                : "Working through the team"}
-            {rescue.callingLanguage && <span className="live-language"> speaking {rescue.callingLanguage}</span>}
-          </p>
-
-          <ul className="live-feed">
-            {rescue.timeline.slice(-6).map((entry, index, all) => (
+          <ul className="live-events">
+            {rescue.timeline.map((entry, index, all) => (
               <li key={entry.id} className={`live-event${index === all.length - 1 ? " live-event-latest" : ""}`}>
                 <time dateTime={entry.timestamp}>{formatTime(entry.timestamp, timeZone)}</time>
                 <span>{entry.message}</span>
@@ -400,8 +430,6 @@ export function ScheduleView() {
                         key={shift.id}
                         className={`shift-block shift-block-${state}${selectedId === shift.id ? " shift-block-selected" : ""}`}
                         style={(() => {
-                          // Equal division makes 3+ overlaps unreadable, so blocks
-                          // keep a minimum width and cascade over each other.
                           const width = Math.max(1 / lanes, 0.62);
                           const step = lanes > 1 ? (1 - width) / (lanes - 1) : 0;
                           return {
@@ -438,11 +466,14 @@ export function ScheduleView() {
         <ShiftDetail
           shift={selected}
           person={selected.assignedEmployeeId ? personById.get(selected.assignedEmployeeId) ?? null : null}
+          people={data.people}
           rescue={rescue}
           timeZone={timeZone}
           canManage={data.canManage}
           busy={busyId === selected.id}
+          onAssign={(empId) => assignShift(selected.id, empId)}
           onFindCoverage={() => findCoverage(selected.id)}
+          onUnfulfillAndRescue={(shiftId) => markUnfulfilledAndRescue(shiftId)}
           onEdit={() =>
             setEditorFor({
               id: selected.id,
@@ -478,21 +509,27 @@ function CurrentTimeLine({ now, timeZone }: { now: Date; timeZone: string }) {
 function ShiftDetail({
   shift,
   person,
+  people,
   rescue,
   timeZone,
   canManage,
   busy,
+  onAssign,
   onFindCoverage,
+  onUnfulfillAndRescue,
   onEdit,
   onClose,
 }: {
   shift: Shift;
   person: Person | null;
+  people: Person[];
   rescue: Rescue;
   timeZone: string;
   canManage: boolean;
   busy: boolean;
+  onAssign: (employeeId: string | null) => void;
   onFindCoverage: () => void;
+  onUnfulfillAndRescue: (shiftId: string) => void;
   onEdit: () => void;
   onClose: () => void;
 }) {
@@ -540,7 +577,27 @@ function ShiftDetail({
         <div className="detail-row">
           <span className="detail-label">Assigned</span>
           <span className="detail-value">
-            {person ? person.name : isFilling ? rescueLabel(rescue) : "Nobody yet"}
+            {canManage ? (
+              <select
+                className="select-inline"
+                value={shift.assignedEmployeeId ?? ""}
+                onChange={(e) => onAssign(e.target.value || null)}
+                disabled={busy}
+              >
+                <option value="">-- Unassigned --</option>
+                {people.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} ({p.role})
+                  </option>
+                ))}
+              </select>
+            ) : person ? (
+              person.name
+            ) : isFilling ? (
+              rescueLabel(rescue)
+            ) : (
+              "Nobody yet"
+            )}
           </span>
         </div>
         {person && rescue.shiftId === shift.id && rescue.confirmedBySms && (
@@ -551,10 +608,31 @@ function ShiftDetail({
         )}
       </div>
 
-      {!person && canManage && (
-        <button className="btn btn-primary" onClick={onFindCoverage} disabled={busy || (rescue.active && rescue.shiftId !== shift.id)}>
-          {busy ? "Starting…" : rescue.active && rescue.shiftId !== shift.id ? "Another shift is being covered" : "Find coverage"}
-        </button>
+      {canManage && (
+        <div className="detail-actions" style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          {!person ? (
+            <button className="btn btn-primary" onClick={onFindCoverage} disabled={busy || (rescue.active && rescue.shiftId !== shift.id)}>
+              {busy ? "Starting…" : rescue.active && rescue.shiftId !== shift.id ? "Another shift is being covered" : "Find coverage"}
+            </button>
+          ) : (
+            <>
+              <button
+                className="btn btn-ghost"
+                onClick={() => onAssign(null)}
+                disabled={busy}
+              >
+                Unassign shift
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={() => onUnfulfillAndRescue(shift.id)}
+                disabled={busy || rescue.active}
+              >
+                {busy ? "Starting…" : rescue.active ? "Covering another shift" : "Unassign & Schedule Rescue"}
+              </button>
+            </>
+          )}
+        </div>
       )}
 
       {isFilling && rescue.timeline.length > 0 && (
