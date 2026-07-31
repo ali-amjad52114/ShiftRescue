@@ -774,3 +774,381 @@ body {
     text-align: left;
   }
 }
+
+/* ============================================================ Product shell */
+
+.page-narrow {
+  max-width: 520px;
+}
+
+.page-title {
+  font-family: var(--font-grenette);
+  font-weight: var(--font-weight-regular);
+  font-size: var(--text-heading);
+  line-height: var(--leading-heading);
+  letter-spacing: var(--tracking-heading);
+  color: var(--color-deep-forest);
+  margin: var(--spacing-4) 0 0;
+}
+
+.schedule-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--spacing-20);
+  flex-wrap: wrap;
+}
+
+.week-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-8);
+}
+
+.week-label {
+  font-size: var(--text-body-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-deep-forest);
+  min-width: 9ch;
+  text-align: center;
+}
+
+.btn-sm {
+  padding: var(--spacing-8) var(--spacing-12);
+  font-size: var(--text-body-sm);
+}
+
+.notice {
+  margin: 0;
+  padding: var(--spacing-12) var(--spacing-16);
+  border-radius: var(--radius-buttons);
+  background: var(--color-paper-white);
+  border-left: 4px solid var(--color-ink-black);
+  font-size: var(--text-body-sm);
+  color: var(--color-ink-black);
+}
+
+/* --------------------------------------------------------- Coverage strip */
+
+.coverage-strip {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-32);
+  flex-wrap: wrap;
+  background: var(--surface-paper-white);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-cards);
+  padding: var(--spacing-20) var(--spacing-24);
+}
+
+.coverage-stat {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-8);
+}
+
+.coverage-value {
+  font-size: var(--text-heading-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-deep-forest);
+}
+
+.coverage-label {
+  font-size: var(--text-caption);
+  letter-spacing: var(--tracking-caption);
+  text-transform: uppercase;
+  color: var(--color-charcoal);
+}
+
+.coverage-stat-open .coverage-value { color: var(--color-ink-black); }
+.coverage-stat-filling .coverage-value { color: var(--color-forest-mid); }
+
+.coverage-zone {
+  margin: 0 0 0 auto;
+  font-size: var(--text-caption);
+  letter-spacing: var(--tracking-caption);
+  text-transform: uppercase;
+  color: var(--color-charcoal);
+}
+
+/* ---------------------------------------------------------------- Calendar */
+
+.calendar {
+  display: flex;
+  gap: var(--spacing-12);
+  background: var(--surface-paper-white);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-cards);
+  padding: var(--spacing-20);
+  overflow-x: auto;
+}
+
+.calendar-hours {
+  position: relative;
+  flex: none;
+  width: 52px;
+  margin-top: 52px;
+  height: 620px;
+}
+
+.calendar-hour {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+  font-size: var(--text-caption);
+  color: var(--color-charcoal);
+  font-variant-numeric: tabular-nums;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(116px, 1fr));
+  gap: var(--spacing-8);
+  flex: 1;
+  min-width: 840px;
+}
+
+.calendar-day-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-8);
+  height: 52px;
+  padding-bottom: var(--spacing-12);
+}
+
+.calendar-day-name {
+  font-size: var(--text-caption);
+  letter-spacing: var(--tracking-caption);
+  text-transform: uppercase;
+  color: var(--color-charcoal);
+}
+
+.calendar-day-num {
+  font-size: var(--text-subheading);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-deep-forest);
+}
+
+.calendar-day-today .calendar-day-num {
+  background: var(--color-chartreuse-lime);
+  border-radius: var(--radius-tags);
+  padding: 0 var(--spacing-8);
+}
+
+.calendar-slots {
+  position: relative;
+  height: 620px;
+  border-top: 1px solid var(--hairline);
+  border-left: 1px solid var(--hairline);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent,
+    transparent calc(100% / 16 - 1px),
+    var(--hairline) calc(100% / 16 - 1px),
+    var(--hairline) calc(100% / 16)
+  );
+}
+
+.now-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--color-vivid-green);
+  z-index: 2;
+}
+
+/* ------------------------------------------------------------ Shift blocks */
+
+.shift-block {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--spacing-8);
+  border-radius: var(--radius-buttons);
+  text-align: left;
+  overflow: hidden;
+  cursor: pointer;
+  font-family: var(--font-graphik);
+  border: 1px solid transparent;
+  transition: filter 0.15s ease;
+}
+
+.shift-block:hover { filter: brightness(0.97); }
+
+.shift-block-time {
+  font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+
+.shift-block-role {
+  font-size: var(--text-body-sm);
+  font-weight: var(--font-weight-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shift-block-person {
+  font-size: var(--text-caption);
+  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shift-block-covered {
+  background: var(--color-deep-forest);
+  color: var(--color-paper-white);
+}
+
+/* An unfilled shift is the problem this product solves — it reads as a hole. */
+.shift-block-open {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--color-pale-sage),
+    var(--color-pale-sage) 6px,
+    transparent 6px,
+    transparent 12px
+  );
+  border-color: var(--color-ink-black);
+  color: var(--color-ink-black);
+}
+
+.shift-block-filling {
+  background: var(--color-chartreuse-lime);
+  color: var(--color-ink-black);
+  border-color: var(--color-forest-mid);
+}
+
+.shift-block-selected {
+  outline: 2px solid var(--color-ink-black);
+  outline-offset: 1px;
+}
+
+/* ----------------------------------------------------------- Detail panel */
+
+.detail-panel {
+  background: var(--surface-paper-white);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-cards);
+  padding: var(--spacing-24);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-16);
+}
+
+.activity {
+  border-top: 1px solid var(--hairline);
+  padding-top: var(--spacing-12);
+}
+
+.activity-summary {
+  font-size: var(--text-body-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-deep-forest);
+  cursor: pointer;
+}
+
+.activity-list {
+  list-style: none;
+  margin: var(--spacing-12) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-8);
+}
+
+.activity-item {
+  display: flex;
+  gap: var(--spacing-12);
+  font-size: var(--text-body-sm);
+  color: var(--color-deep-forest);
+}
+
+.activity-item time {
+  font-variant-numeric: tabular-nums;
+  color: var(--color-charcoal);
+  flex: none;
+}
+
+/* ------------------------------------------------------------ Forms/tables */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-16);
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  align-items: end;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-4);
+}
+
+.field-label {
+  font-size: var(--text-caption);
+  letter-spacing: var(--tracking-caption);
+  text-transform: uppercase;
+  color: var(--color-charcoal);
+}
+
+.input {
+  font-family: var(--font-graphik);
+  font-size: var(--text-body);
+  padding: var(--spacing-12);
+  border-radius: var(--radius-inputs);
+  border: 1px solid var(--hairline-strong);
+  background: var(--color-paper-white);
+  color: var(--color-deep-forest);
+}
+
+.form-actions {
+  display: flex;
+  gap: var(--spacing-12);
+  align-items: center;
+}
+
+.table-scroll { overflow-x: auto; }
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-body-sm);
+}
+
+.table th {
+  text-align: left;
+  font-size: var(--text-caption);
+  letter-spacing: var(--tracking-caption);
+  text-transform: uppercase;
+  color: var(--color-charcoal);
+  font-weight: var(--font-weight-medium);
+  padding: 0 var(--spacing-12) var(--spacing-12) 0;
+  white-space: nowrap;
+}
+
+.table td {
+  padding: var(--spacing-12) var(--spacing-12) var(--spacing-12) 0;
+  border-top: 1px solid var(--hairline);
+  color: var(--color-deep-forest);
+  vertical-align: middle;
+}
+
+.table-strong { font-weight: var(--font-weight-medium); }
+.table-mono { font-family: var(--font-mono); font-size: var(--text-caption); }
+.table-actions { display: flex; gap: var(--spacing-8); }
+
+@media (max-width: 900px) {
+  .calendar-hours { display: none; }
+  .coverage-zone { margin-left: 0; }
+}

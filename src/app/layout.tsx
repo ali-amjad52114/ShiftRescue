@@ -20,8 +20,8 @@ const ui = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "ShiftRescue — Live Voice AI Workflow",
-  description: "Voice-first shift coverage demo",
+  title: "ShiftRescue — Shift coverage, handled",
+  description: "Scheduling that fills its own gaps.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
@@ -40,8 +40,11 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
               ShiftRescue
             </span>
             <nav className="nav-links" aria-label="Primary">
-              <a className="nav-pill" href="/" aria-current="page">
-                Dashboard
+              <a className="nav-pill" href="/">
+                Schedule
+              </a>
+              <a className="nav-pill" href="/team">
+                Team
               </a>
             </nav>
           </div>
@@ -51,8 +54,8 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
 
         <footer className="footer">
           <div className="footer-inner">
-            <span>One uncovered shift, closed by a voice agent.</span>
-            <span>VoiceOS · Vapi + OpenAI · a1mobile</span>
+            <span>Shift coverage, handled.</span>
+            <span>{new Date().getFullYear()} ShiftRescue</span>
           </div>
         </footer>
       </body>

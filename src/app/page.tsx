@@ -1,5 +1,5 @@
-import { DashboardView } from "@/components/dashboard/DashboardView";
+import { ScheduleView } from "@/components/schedule/ScheduleView";
 
-export default function HomePage() {
-  return <DashboardView />;
+export default function SchedulePage() {
+  return <ScheduleView />;
 }
