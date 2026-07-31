@@ -56,7 +56,7 @@ describe("Workflow Orchestrator Engine", () => {
     expect(state.status).toBe("CALLING_WORKER");
     expect(state.shift?.role).toBe("Kitchen Assistant");
     expect(state.currentWorkerIndex).toBe(0);
-    expect(state.currentWorkerId).toBe("emp_maria");
+    expect(state.currentWorkerId).toBe("worker-1");
     expect(state.timeline).toHaveLength(2);
     expect(state.timeline[0].message).toContain("Uncovered Kitchen Assistant shift created");
     expect(state.timeline[1].message).toContain("Calling Maria Alvarez in Spanish");
@@ -75,7 +75,7 @@ describe("Workflow Orchestrator Engine", () => {
 
     expect(state.status).toBe("CALLING_WORKER");
     expect(state.currentWorkerIndex).toBe(1);
-    expect(state.currentWorkerId).toBe("emp_ahmed");
+    expect(state.currentWorkerId).toBe("worker-2");
     expect(state.timeline.some((t) => t.message.includes("Maria Alvarez declined"))).toBe(true);
     expect(state.timeline.some((t) => t.message.includes("Calling Ahmed Khan in Urdu"))).toBe(true);
   });
@@ -93,7 +93,7 @@ describe("Workflow Orchestrator Engine", () => {
     const state = await submitDecision("accepted");
 
     expect(state.status).toBe("TRIGGERING_VOICEOS");
-    expect(state.shift?.assignedWorkerId).toBe("emp_ahmed");
+    expect(state.shift?.assignedWorkerId).toBe("worker-2");
     expect(state.timeline.some((t) => t.message.includes("Ahmed Khan accepted"))).toBe(true);
   });
 
@@ -110,7 +110,7 @@ describe("Workflow Orchestrator Engine", () => {
     await submitDecision("accepted");
 
     const stateAfterLateCallback = await handleVapiResult({
-      workerId: "emp_john",
+      workerId: "worker-3",
       attemptId: "att_stale",
       decision: "declined",
     });
@@ -243,7 +243,7 @@ describe("Workflow Orchestrator Engine", () => {
         spreadsheetUpdateRange: "'Shift Events'!A8:V8",
       });
 
-      expect(state.shift?.assignedWorkerId).toBe("emp_ahmed");
+      expect(state.shift?.assignedWorkerId).toBe("worker-2");
       expect(state.status).toBe("COMPLETE");
       expect(state.proof.smsMessageId).toBeTruthy();
     } finally {
@@ -259,26 +259,26 @@ describe("Workflow Orchestrator Engine", () => {
     // Retried webhook for worker-1 while worker-2 is on the phone.
     await expect(
       handleVapiResult({
-        workerId: "emp_maria",
+        workerId: "worker-1",
         attemptId: firstAttempt,
         decision: "declined",
       }),
     ).rejects.toThrow("active call attempt");
     const state = await getWorkflowState();
 
-    expect(state.currentWorkerId).toBe("emp_ahmed");
+    expect(state.currentWorkerId).toBe("worker-2");
     expect(state.timeline.filter((t) => t.message.includes("Maria Alvarez declined"))).toHaveLength(1);
   });
 
   it("should reject an acceptance from someone who is not on the active attempt", async () => {
     await handleVoiceosCommand(command);
-    await expect(submitDecision("accepted", "emp_ahmed")).rejects.toThrow(
+    await expect(submitDecision("accepted", "worker-2")).rejects.toThrow(
       "active call attempt",
     );
     const state = await getWorkflowState();
 
     expect(state.shift?.assignedWorkerId).toBeNull();
-    expect(state.currentWorkerId).toBe("emp_maria");
+    expect(state.currentWorkerId).toBe("worker-1");
     expect(state.currentWorkerIndex).toBe(0);
   });
 
@@ -315,7 +315,7 @@ describe("Workflow Orchestrator Engine", () => {
     const firstAttempt = (await getWorkflowState()).activeAttemptId;
     const state = await submitDecision("declined");
 
-    expect(state.currentWorkerId).toBe("emp_ahmed");
+    expect(state.currentWorkerId).toBe("worker-2");
     expect(state.proof.callId).toBeTruthy();
     expect(state.activeAttemptId).toBeTruthy();
     expect(state.activeAttemptId).not.toBe(firstAttempt);
@@ -334,14 +334,14 @@ describe("Workflow Orchestrator Engine", () => {
 
   it("should keep calling down the list until someone accepts", async () => {
     await handleVoiceosCommand(command);
-    expect((await getWorkflowState()).currentWorkerId).toBe("emp_maria");
+    expect((await getWorkflowState()).currentWorkerId).toBe("worker-1");
 
     await submitDecision("declined");
-    expect((await getWorkflowState()).currentWorkerId).toBe("emp_ahmed");
+    expect((await getWorkflowState()).currentWorkerId).toBe("worker-2");
 
     const state = await submitDecision("accepted");
     expect(state.status).toBe("TRIGGERING_VOICEOS");
-    expect(state.shift?.assignedWorkerId).toBe("emp_ahmed");
+    expect(state.shift?.assignedWorkerId).toBe("worker-2");
   });
 
   it("should move on when a worker never answers", async () => {
@@ -353,7 +353,7 @@ describe("Workflow Orchestrator Engine", () => {
     });
 
     expect(state.status).toBe("CALLING_WORKER");
-    expect(state.currentWorkerId).toBe("emp_ahmed");
+    expect(state.currentWorkerId).toBe("worker-2");
     expect(state.timeline.some((t) => t.message.includes("Maria Alvarez did not answer"))).toBe(true);
   });
 
@@ -365,7 +365,7 @@ describe("Workflow Orchestrator Engine", () => {
       endedReason: "silence-timed-out",
     });
 
-    expect(state.currentWorkerId).toBe("emp_ahmed");
+    expect(state.currentWorkerId).toBe("worker-2");
     expect(state.timeline.some((t) => t.message.includes("without a clear decision"))).toBe(true);
   });
 
@@ -375,7 +375,7 @@ describe("Workflow Orchestrator Engine", () => {
     const state = await submitDecision("needs_clarification");
 
     expect(state.status).toBe("CALLING_WORKER");
-    expect(state.currentWorkerId).toBe("emp_ahmed");
+    expect(state.currentWorkerId).toBe("worker-2");
   });
 
   it("should ignore an end-of-call report once a decision already advanced the run", async () => {
@@ -389,7 +389,7 @@ describe("Workflow Orchestrator Engine", () => {
       endedReason: "customer-ended-call",
     });
 
-    expect(state.currentWorkerId).toBe("emp_ahmed");
+    expect(state.currentWorkerId).toBe("worker-2");
   });
 
   it("should not let a stale call report skip the worker now ringing", async () => {
@@ -400,7 +400,7 @@ describe("Workflow Orchestrator Engine", () => {
       endedReason: "customer-did-not-answer",
     });
 
-    expect(state.currentWorkerId).toBe("emp_maria");
+    expect(state.currentWorkerId).toBe("worker-1");
   });
 
   it("should end INCOMPLETE when nobody down the list answers", async () => {
