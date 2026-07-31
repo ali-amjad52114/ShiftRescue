@@ -155,6 +155,9 @@ class VoiceOSMCPServerTests(unittest.TestCase):
                 schedule_updated=True,
                 calendar_event_id="calendar_123",
                 slack_message_id="slack_123",
+                gmail_message_id="gmail_123",
+                spreadsheet_id="sheet_123",
+                spreadsheet_update_range="'Shift Events'!A8:V8",
             )
 
         request.assert_called_once_with(
@@ -165,6 +168,9 @@ class VoiceOSMCPServerTests(unittest.TestCase):
                 "scheduleUpdated": True,
                 "calendarEventId": "calendar_123",
                 "slackMessageId": "slack_123",
+                "gmailMessageId": "gmail_123",
+                "spreadsheetId": "sheet_123",
+                "spreadsheetUpdateRange": "'Shift Events'!A8:V8",
             },
         )
         self.assertTrue(result["ok"])
@@ -177,26 +183,49 @@ class VoiceOSMCPServerTests(unittest.TestCase):
                 "schedule_updated": False,
                 "calendar_event_id": "calendar_123",
                 "slack_message_id": "slack_123",
+                "gmail_message_id": "gmail_123",
+                "spreadsheet_id": "sheet_123",
+                "spreadsheet_update_range": "'Shift Events'!A8:V8",
             },
             {
                 "schedule_updated": True,
                 "calendar_event_id": "",
                 "slack_message_id": "slack_123",
+                "gmail_message_id": "gmail_123",
+                "spreadsheet_id": "sheet_123",
+                "spreadsheet_update_range": "'Shift Events'!A8:V8",
             },
             {
                 "schedule_updated": True,
                 "calendar_event_id": "calendar_123",
                 "slack_message_id": " ",
+                "gmail_message_id": "gmail_123",
+                "spreadsheet_id": "sheet_123",
+                "spreadsheet_update_range": "'Shift Events'!A8:V8",
             },
             {
                 "schedule_updated": True,
                 "calendar_event_id": "MOCK-calendar-event-id",
                 "slack_message_id": "slack_123",
+                "gmail_message_id": "gmail_123",
+                "spreadsheet_id": "sheet_123",
+                "spreadsheet_update_range": "'Shift Events'!A8:V8",
             },
             {
                 "schedule_updated": True,
                 "calendar_event_id": "calendar_123",
                 "slack_message_id": "mock-slack-message-id",
+                "gmail_message_id": "gmail_123",
+                "spreadsheet_id": "sheet_123",
+                "spreadsheet_update_range": "'Shift Events'!A8:V8",
+            },
+            {
+                "schedule_updated": True,
+                "calendar_event_id": "calendar_123",
+                "slack_message_id": "slack_123",
+                "gmail_message_id": "",
+                "spreadsheet_id": "sheet_123",
+                "spreadsheet_update_range": "'Shift Events'!A8:V8",
             },
         )
 

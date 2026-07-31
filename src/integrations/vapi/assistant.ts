@@ -51,6 +51,8 @@ export function buildAssistantOverrides(context: ShiftCallContext) {
     firstMessage: buildFirstMessage(context),
     variableValues: {
       workerId: context.workerId,
+      shiftId: context.shiftId,
+      attemptId: context.attemptId,
       workerName: context.workerName,
       language: context.language,
       role: context.role,

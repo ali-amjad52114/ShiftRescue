@@ -3,6 +3,9 @@ interface WorkflowProof {
   scheduleUpdated?: boolean;
   calendarEventId?: string;
   slackMessageId?: string;
+  gmailMessageId?: string;
+  spreadsheetId?: string;
+  spreadsheetUpdateRange?: string;
   smsMessageId?: string;
 }
 
@@ -17,6 +20,9 @@ export function ProofPanel({ proof }: ProofPanelProps) {
   if (proof.scheduleUpdated) rows.push({ key: "Schedule app", value: "shift marked FILLED" });
   if (proof.calendarEventId) rows.push({ key: "Google Calendar event", value: proof.calendarEventId });
   if (proof.slackMessageId) rows.push({ key: "Slack message", value: proof.slackMessageId });
+  if (proof.gmailMessageId) rows.push({ key: "Gmail message", value: proof.gmailMessageId });
+  if (proof.spreadsheetId) rows.push({ key: "Google Sheet", value: proof.spreadsheetId });
+  if (proof.spreadsheetUpdateRange) rows.push({ key: "Sheet update", value: proof.spreadsheetUpdateRange });
   if (proof.smsMessageId) rows.push({ key: "a1mobile SMS", value: proof.smsMessageId });
 
   return (

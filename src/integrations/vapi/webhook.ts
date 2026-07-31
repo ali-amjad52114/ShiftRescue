@@ -13,7 +13,7 @@ const DECISION_BY_TOOL: Record<string, WorkerDecision> = {
 };
 
 const SPOKEN_ACK: Record<WorkerDecision, string> = {
-  accepted: "Shift assigned. Confirm the shift is theirs and that a confirmation text is on the way, then end the call.",
+  accepted: "Acceptance recorded. Say a confirmation text will arrive after the schedule is updated, then end the call.",
   declined: "Decline recorded. Thank the worker and end the call.",
   needs_clarification: "Logged for follow-up. Tell the worker the team will follow up, then end the call.",
 };
@@ -47,19 +47,27 @@ export function parseVapiToolCall(
     const decision = name ? DECISION_BY_TOOL[name] : undefined;
     if (!decision) continue;
 
+    // Vapi has emitted each of these shapes in either its docs or live SDKs.
+    // Merge all of them, with top-level trusted values winning.
     const args = {
+      ...parseArguments(call.function?.parameters),
       ...parseArguments(call.function?.arguments),
-      ...(("arguments" in call && call.arguments) || {}),
+      ...parseArguments("parameters" in call ? call.parameters : undefined),
+      ...parseArguments("arguments" in call ? call.arguments : undefined),
     };
 
     const workerId =
       (typeof args.workerId === "string" && args.workerId) ||
       (message.call?.assistantOverrides?.variableValues?.workerId as string | undefined) ||
       (message.assistant?.variableValues?.workerId as string | undefined);
+    const attemptId =
+      (typeof args.attemptId === "string" && args.attemptId) ||
+      (message.call?.assistantOverrides?.variableValues?.attemptId as string | undefined) ||
+      (message.assistant?.variableValues?.attemptId as string | undefined);
 
-    if (!workerId) continue;
+    if (!workerId || !attemptId) continue;
 
-    return { toolCallId: call.id, result: { workerId, decision } };
+    return { toolCallId: call.id, result: { workerId, attemptId, decision } };
   }
 
   return null;
@@ -141,10 +149,17 @@ export async function handleVapiWebhook(
     await handlers.onDecision(parsed.result);
   } catch (error) {
     return {
-      status: 502,
+      // A tool response keeps the assistant honest and prevents retries from
+      // turning one stale callback into multiple queue mutations.
+      status: 200,
       body: {
-        success: false,
-        error: error instanceof Error ? error.message : "Failed to record decision",
+        results: [
+          {
+            toolCallId: parsed.toolCallId,
+            result:
+              "The decision could not be recorded. Do not confirm the shift. Tell the worker the scheduling team will follow up, then end the call.",
+          },
+        ],
       },
     };
   }

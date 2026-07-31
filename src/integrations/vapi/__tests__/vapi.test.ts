@@ -13,6 +13,8 @@ import type { ShiftCallContext } from "../types";
 
 const context: ShiftCallContext = {
   workerId: "worker-2",
+  shiftId: "shift-1",
+  attemptId: "att-worker-2-1",
   workerName: "Ahmed",
   language: "Urdu",
   role: "Kitchen Assistant",
@@ -63,9 +65,16 @@ describe("buildVapiTools", () => {
     expect(names).toEqual([...vapiToolNames]);
   });
 
-  it("requires workerId on every tool", () => {
+  it("keeps worker and attempt ids out of model-controlled parameters", () => {
     for (const tool of buildVapiTools()) {
-      expect(tool.function.parameters.required).toContain("workerId");
+      expect(tool.function.parameters.required).not.toContain("workerId");
+      expect(tool.function.parameters.properties).not.toHaveProperty("workerId");
+      expect(tool.parameters).toEqual(
+        expect.arrayContaining([
+          { key: "workerId", value: "{{ workerId }}" },
+          { key: "attemptId", value: "{{ attemptId }}" },
+        ]),
+      );
     }
   });
 });
@@ -76,12 +85,20 @@ describe("parseVapiToolCall", () => {
       message: {
         type: "tool-calls",
         toolCallList: [
-          { id: "call_1", name: "accept_shift", arguments: { workerId: "worker-2" } },
+          {
+            id: "call_1",
+            name: "accept_shift",
+            arguments: { workerId: "worker-2", attemptId: "att-2" },
+          },
         ],
       },
     });
 
-    expect(parsed?.result).toEqual({ workerId: "worker-2", decision: "accepted" });
+    expect(parsed?.result).toEqual({
+      workerId: "worker-2",
+      attemptId: "att-2",
+      decision: "accepted",
+    });
   });
 
   it("parses stringified arguments and maps decline and clarification", () => {
@@ -92,7 +109,10 @@ describe("parseVapiToolCall", () => {
           {
             id: "call_2",
             type: "function",
-            function: { name: "decline_shift", arguments: '{"workerId":"worker-1"}' },
+            function: {
+              name: "decline_shift",
+              arguments: '{"workerId":"worker-1","attemptId":"att-1"}',
+            },
           },
         ],
       },
@@ -103,11 +123,41 @@ describe("parseVapiToolCall", () => {
       message: {
         type: "tool-calls",
         toolCallList: [
-          { id: "call_3", name: "needs_clarification", arguments: { workerId: "worker-3" } },
+          {
+            id: "call_3",
+            name: "needs_clarification",
+            parameters: { workerId: "worker-3", attemptId: "att-3" },
+          },
         ],
       },
     });
     expect(unclear?.result.decision).toBe("needs_clarification");
+  });
+
+  it("parses function.parameters from alternate Vapi webhook shapes", () => {
+    const parsed = parseVapiToolCall({
+      message: {
+        type: "tool-calls",
+        toolCallList: [
+          {
+            id: "call_parameters",
+            function: {
+              name: "decline_shift",
+              parameters: {
+                workerId: "worker-1",
+                attemptId: "att-parameters",
+              },
+            },
+          },
+        ],
+      },
+    });
+
+    expect(parsed?.result).toEqual({
+      workerId: "worker-1",
+      attemptId: "att-parameters",
+      decision: "declined",
+    });
   });
 
   it("falls back to the call variable values when workerId is missing", () => {
@@ -115,11 +165,16 @@ describe("parseVapiToolCall", () => {
       message: {
         type: "tool-calls",
         toolCallList: [{ id: "call_4", name: "accept_shift", arguments: {} }],
-        call: { assistantOverrides: { variableValues: { workerId: "worker-2" } } },
+        call: {
+          assistantOverrides: {
+            variableValues: { workerId: "worker-2", attemptId: "att-2" },
+          },
+        },
       },
     });
 
     expect(parsed?.result.workerId).toBe("worker-2");
+    expect(parsed?.result.attemptId).toBe("att-2");
   });
 
   it("ignores non tool-call messages", () => {
@@ -194,7 +249,13 @@ describe("handleVapiWebhook", () => {
   const acceptPayload = {
     message: {
       type: "tool-calls",
-      toolCallList: [{ id: "call_9", name: "accept_shift", arguments: { workerId: "worker-2" } }],
+      toolCallList: [
+        {
+          id: "call_9",
+          name: "accept_shift",
+          arguments: { workerId: "worker-2", attemptId: "att-2" },
+        },
+      ],
     },
   };
 
@@ -202,7 +263,11 @@ describe("handleVapiWebhook", () => {
     const deliver = vi.fn();
     const { status, body } = await handleVapiWebhook(acceptPayload, { onDecision: deliver });
 
-    expect(deliver).toHaveBeenCalledWith({ workerId: "worker-2", decision: "accepted" });
+    expect(deliver).toHaveBeenCalledWith({
+      workerId: "worker-2",
+      attemptId: "att-2",
+      decision: "accepted",
+    });
     expect(status).toBe(200);
     expect(body).toEqual(buildToolCallResponse("call_9", "accepted"));
   });
@@ -215,14 +280,16 @@ describe("handleVapiWebhook", () => {
     expect(status).toBe(200);
   });
 
-  it("reports 502 when the backend reducer throws", async () => {
+  it("returns an honest spoken failure when the backend reducer throws", async () => {
     const deliver = vi.fn(() => {
       throw new Error("state write failed");
     });
     const { status, body } = await handleVapiWebhook(acceptPayload, { onDecision: deliver });
 
-    expect(status).toBe(502);
-    expect(body).toMatchObject({ success: false, error: "state write failed" });
+    expect(status).toBe(200);
+    expect(body).toMatchObject({
+      results: [{ toolCallId: "call_9", result: expect.stringContaining("could not be recorded") }],
+    });
   });
 });
 

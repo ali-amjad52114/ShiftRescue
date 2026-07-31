@@ -8,6 +8,8 @@ export type SupportedLanguage = "English" | "Spanish" | "Urdu" | "Punjabi";
 /** Shift details handed to the assistant by the backend. Nothing else may be spoken. */
 export interface ShiftCallContext {
   workerId: string;
+  shiftId: string;
+  attemptId: string;
   workerName: string;
   language: SupportedLanguage;
   role: string;
@@ -21,6 +23,7 @@ export interface ShiftCallContext {
 /** The single structured result the backend expects from the call. */
 export interface VapiDecisionResult {
   workerId: string;
+  attemptId: string;
   decision: WorkerDecision;
 }
 
@@ -30,11 +33,13 @@ export interface StartVapiShiftCallInput {
   phone: string;
   language: string;
   shift: Shift;
+  attemptId?: string;
 }
 
 export interface StartVapiShiftCallResult {
   success: boolean;
   callId?: string;
+  attemptId?: string;
   error?: string;
 }
 
@@ -50,7 +55,9 @@ export interface VapiToolDefinition {
       required: string[];
     };
   };
-  server?: { url: string };
+  server?: { url: string; timeoutSeconds?: number };
+  /** Server-trusted values interpolated from assistant variableValues. */
+  parameters?: Array<{ key: string; value: string }>;
   messages?: Array<{ type: string; content: string }>;
 }
 
@@ -70,13 +77,24 @@ export interface VapiToolCallWebhook {
     toolCalls?: Array<{
       id: string;
       type?: string;
-      function: { name: string; arguments: string | Record<string, unknown> };
+      parameters?: Record<string, unknown>;
+      arguments?: Record<string, unknown>;
+      function: {
+        name: string;
+        arguments?: string | Record<string, unknown>;
+        parameters?: string | Record<string, unknown>;
+      };
     }>;
     toolCallList?: Array<{
       id: string;
       name?: string;
       arguments?: Record<string, unknown>;
-      function?: { name: string; arguments: string | Record<string, unknown> };
+      parameters?: Record<string, unknown>;
+      function?: {
+        name: string;
+        arguments?: string | Record<string, unknown>;
+        parameters?: string | Record<string, unknown>;
+      };
     }>;
     call?: { id?: string; assistantOverrides?: { variableValues?: Record<string, unknown> } };
     assistant?: { variableValues?: Record<string, unknown> };

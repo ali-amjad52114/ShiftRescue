@@ -35,6 +35,10 @@ export function buildShiftCallContext(input: StartVapiShiftCallInput): ShiftCall
 
   return {
     workerId: input.workerId,
+    shiftId: input.shift.id,
+    attemptId:
+      input.attemptId ??
+      `att_${input.workerId}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
     workerName: input.workerName,
     language: resolveLanguage(input.language),
     role: input.shift.role,
@@ -57,10 +61,17 @@ export async function startVapiShiftCall(
   const apiKey = process.env.VAPI_API_KEY;
 
   if (!apiKey || !process.env.VAPI_ASSISTANT_ID || !vapiPhoneNumberId) {
-    // Unique per attempt, like the real thing: the workflow tells attempts apart
-    // by call id, so a shared constant would let one call's end-of-call report
-    // be mistaken for another's.
-    return { success: true, callId: `mock-vapi-call-${Date.now()}-${mockCallCounter++}` };
+    const attemptId =
+      input.attemptId ??
+      `att_${input.workerId}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    // Both ids are unique per attempt, like the real thing. A shared constant
+    // would let one call's end-of-call report be mistaken for another's and
+    // skip a worker who was never actually rung.
+    return {
+      success: true,
+      callId: `mock-vapi-call-${Date.now()}-${mockCallCounter++}`,
+      attemptId,
+    };
   }
 
   if (!input.phone) {
@@ -93,7 +104,7 @@ export async function startVapiShiftCall(
       };
     }
 
-    return { success: true, callId: data.id };
+    return { success: true, callId: data.id, attemptId: context.attemptId };
   } catch (error) {
     return {
       success: false,

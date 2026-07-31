@@ -1,0 +1,43 @@
+name: Auto Re-commit as KramPiotr on Non-KramPiotr Pushes
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  recommit-if-needed:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check author of latest commit
+        id: check_author
+        run: |
+          AUTHOR=$(git log -1 --format='%an')
+          EMAIL=$(git log -1 --format='%ae')
+          echo "Latest commit author: $AUTHOR <$EMAIL>"
+
+          # Check if the author matches Piotr Kram / KramPiotr / krampiotr
+          if [[ "$AUTHOR" =~ [Kk]ram[Pp]iotr ]] || [[ "$AUTHOR" =~ "Piotr Kram" ]] || [[ "$EMAIL" =~ [Kk]ram[Pp]iotr ]]; then
+            echo "Commit was made by KramPiotr. No action needed."
+            echo "recommit=false" >> $GITHUB_OUTPUT
+          else
+            echo "Commit was made by non-KramPiotr user ($AUTHOR). Triggering auto-recommit."
+            echo "recommit=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Re-commit as KramPiotr to trigger Vercel deployment
+        if: steps.check_author.outputs.recommit == 'true'
+        run: |
+          git config user.name "KramPiotr"
+          git config user.email "krampiotrs@gmail.com"
+          
+          git commit --allow-empty -m "ci(deploy): trigger Vercel deployment as KramPiotr [skip ci-check]"
+          git push origin main
