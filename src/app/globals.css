@@ -1244,3 +1244,66 @@ body {
   font-weight: var(--font-weight-medium);
   color: var(--color-deep-forest);
 }
+
+/* ------------------------------------------------------------ Live rescue */
+
+/* While a call is happening this is the loudest thing on the page. */
+.live {
+  background: var(--surface-forest-dark);
+  color: var(--color-paper-white);
+  border-radius: var(--radius-cards);
+  padding: var(--spacing-24);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-16);
+}
+
+.live-head {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-16);
+  flex-wrap: wrap;
+}
+
+.live .live-pill {
+  background: var(--color-chartreuse-lime);
+  color: var(--color-ink-black);
+}
+
+.live-shift {
+  font-size: var(--text-body-sm);
+  color: rgba(252, 252, 252, 0.72);
+}
+
+.live-headline {
+  margin: 0;
+  font-family: var(--font-graphik);
+  font-size: var(--text-heading);
+  line-height: var(--leading-heading);
+  letter-spacing: var(--tracking-heading);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-paper-white);
+}
+
+.live-language { color: var(--color-chartreuse-lime); }
+
+.live-feed {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-8);
+  border-top: 1px solid var(--hairline-inverse);
+  padding-top: var(--spacing-16);
+}
+
+.live-event {
+  display: flex;
+  gap: var(--spacing-16);
+  font-size: var(--text-body-sm);
+  color: rgba(252, 252, 252, 0.72);
+}
+
+.live-event time { font-variant-numeric: tabular-nums; flex: none; }
+.live-event-latest { color: var(--color-paper-white); }
