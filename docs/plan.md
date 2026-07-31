@@ -188,8 +188,12 @@ Allowed decisions:
 
 ---
 
-### Part B — Dashboard
-The dashboard only displays the workflow. It does not initiate the main workflow.
+### Part B — Dashboard & Production Deployment
+The dashboard displays the workflow and acts as the project homepage (`/`).
+
+#### Live Production Link
+- **Homepage / Live Dashboard**: [https://shiftrescue.vercel.app](https://shiftrescue.vercel.app)
+- **Primary Vercel Scope**: `krampiotrs-projects` (`KramPiotr`)
 
 #### Build
 - Current open shift
