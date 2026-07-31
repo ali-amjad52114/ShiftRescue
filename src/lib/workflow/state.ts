@@ -1,12 +1,12 @@
-import { Redis } from "@upstash/redis";
-import { demoWorkers } from "../../data/demo-data";
+import { getRedis } from "../redis";
+import { callableEmployees } from "../employees/store";
 import type { WorkflowState } from "./types";
 
 const STATE_KEY = "shiftrescue:workflow";
 
 /**
- * The dashboard is public and links to the raw JSON, so nothing returned from an
- * API route may carry worker phone numbers. Strip them from any state we expose.
+ * The dashboard is public and anything here can be read by any visitor, so
+ * employee phone numbers are stripped from every API response.
  */
 export function publicWorkflowState(state: WorkflowState) {
   return {
@@ -15,11 +15,11 @@ export function publicWorkflowState(state: WorkflowState) {
   };
 }
 
-function createInitialState(): WorkflowState {
+function createInitialState(workers: WorkflowState["workers"]): WorkflowState {
   return {
     status: "WAITING_FOR_MANAGER_COMMAND",
     shift: null,
-    workers: demoWorkers,
+    workers,
     currentWorkerIndex: -1,
     currentWorkerId: null,
     timeline: [],
@@ -27,81 +27,49 @@ function createInitialState(): WorkflowState {
   };
 }
 
-/**
- * Vercel serves requests from several function instances, each with its own
- * memory — so a Vapi webhook and the dashboard's poll can land on different
- * instances and disagree about the run. Redis gives every instance one shared
- * copy of the workflow.
- *
- * Locally, with no Redis configured, an in-process object is equivalent: one
- * `next dev` process is the only reader and writer. In production that is not
- * true, so a deployment without Redis fails loudly rather than quietly serving
- * a run that other instances cannot see.
- */
-let redis: Redis | null = null;
-
-function getRedis(): Redis | null {
-  if (redis) return redis;
-
-  // The Vercel/Upstash integration injects KV_REST_API_* rather than the
-  // UPSTASH_REDIS_REST_* names Redis.fromEnv() expects, so read both.
-  const url = process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REDIS_REST_TOKEN;
-
-  if (!url || !token) {
-    if (process.env.VERCEL === "1") {
-      throw new Error(
-        "Workflow state requires Redis in production. Set KV_REST_API_URL and " +
-          "KV_REST_API_TOKEN (vercel integration add upstash/upstash-kv).",
-      );
-    }
-    return null;
-  }
-
-  redis = new Redis({ url, token });
-  return redis;
-}
-
 const globalForWorkflow = globalThis as unknown as {
   workflowState: WorkflowState | undefined;
 };
 
-function memoryState(): WorkflowState {
-  if (!globalForWorkflow.workflowState) {
-    globalForWorkflow.workflowState = createInitialState();
-  }
-  return globalForWorkflow.workflowState;
+/**
+ * The roster is owned by the employee store, never by the persisted run — so an
+ * edit on the team page is picked up immediately and a stale copy of someone's
+ * phone number can't linger in Redis. The call position is tracked by id and
+ * the index re-derived, so adding or removing an employee mid-run cannot make
+ * the workflow call the wrong person.
+ */
+async function hydrate(stored: WorkflowState | null): Promise<WorkflowState> {
+  const workers = await callableEmployees();
+  if (!stored) return createInitialState(workers);
+
+  const index = stored.currentWorkerId
+    ? workers.findIndex((w) => w.id === stored.currentWorkerId)
+    : stored.currentWorkerIndex;
+
+  return { ...stored, workers, currentWorkerIndex: index };
 }
 
 export async function getWorkflowState(): Promise<WorkflowState> {
-  const client = getRedis();
-  if (!client) return memoryState();
-
-  const stored = await client.get<WorkflowState>(STATE_KEY);
-  if (!stored) return createInitialState();
-
-  // Workers are code, not stored data — always take the current roster so
-  // phone numbers and languages cannot go stale in Redis.
-  return { ...stored, workers: demoWorkers };
+  const redis = getRedis();
+  if (!redis) return hydrate(globalForWorkflow.workflowState ?? null);
+  return hydrate(await redis.get<WorkflowState>(STATE_KEY));
 }
 
 export async function updateWorkflowState(newState: WorkflowState): Promise<WorkflowState> {
-  const client = getRedis();
-  if (!client) {
+  const redis = getRedis();
+  if (!redis) {
     globalForWorkflow.workflowState = newState;
     return newState;
   }
 
-  await client.set(STATE_KEY, { ...newState, workers: [] });
+  // Workers are hydrated from the employee store on read; persisting them here
+  // would duplicate phone numbers into a second place.
+  await redis.set(STATE_KEY, { ...newState, workers: [] });
   return newState;
 }
 
 export async function resetWorkflowState(): Promise<WorkflowState> {
-  const fresh = createInitialState();
-  return updateWorkflowState(fresh);
+  return updateWorkflowState(createInitialState(await callableEmployees()));
 }
 
-/** Which store is backing the workflow — surfaced so the demo can't silently run split-brain. */
-export function storageMode(): "redis" | "memory" {
-  return getRedis() ? "redis" : "memory";
-}
+export { storageMode } from "../redis";
