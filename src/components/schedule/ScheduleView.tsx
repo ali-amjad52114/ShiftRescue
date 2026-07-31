@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ShiftForm, type ShiftDraft } from "./ShiftForm";
 import {
   dayFraction,
   describeRelative,
@@ -82,18 +83,44 @@ function localDayKey(iso: string, timeZone: string): string {
     .format(new Date(iso));
 }
 
-function mondayOf(date: Date, timeZone: string): Date {
-  const weekday = new Intl.DateTimeFormat("en-GB", { timeZone, weekday: "short" }).format(date);
+/**
+ * The seven calendar days of the venue's week.
+ *
+ * Both the weekday and the date must be read in the venue's zone: taking the
+ * weekday there but subtracting days from the *local* date puts the week a day
+ * out whenever the two disagree, which is most of the evening in California.
+ * Dates are handled as UTC-midnight calendar values, never instants.
+ */
+function weekDays(timeZone: string, weekOffset: number): Array<{ key: string; weekday: string; dayNumber: number }> {
+  const now = new Date();
+  const [year, month, day] = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  })
+    .format(now)
+    .split("-")
+    .map(Number);
+
+  const weekday = new Intl.DateTimeFormat("en-GB", { timeZone, weekday: "short" }).format(now);
   const offset = Math.max(0, DAY_NAMES.indexOf(weekday));
-  const monday = new Date(date);
-  monday.setDate(monday.getDate() - offset);
-  monday.setHours(12, 0, 0, 0);
-  return monday;
+
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(Date.UTC(year, month - 1, day - offset + weekOffset * 7 + i));
+    return {
+      key: d.toISOString().slice(0, 10),
+      weekday: new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "short" }).format(d),
+      dayNumber: d.getUTCDate(),
+    };
+  });
 }
 
 export function ScheduleView() {
   const [data, setData] = useState<Schedule | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [editorFor, setEditorFor] = useState<ShiftDraft | null | undefined>(undefined);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -121,15 +148,7 @@ export function ScheduleView() {
 
   const timeZone = data?.venue.timeZone ?? "UTC";
 
-  const days = useMemo(() => {
-    const monday = mondayOf(new Date(), timeZone);
-    monday.setDate(monday.getDate() + weekOffset * 7);
-    return Array.from({ length: 7 }, (_, i) => {
-      const date = new Date(monday);
-      date.setDate(monday.getDate() + i);
-      return { key: localDayKey(date.toISOString(), timeZone), date };
-    });
-  }, [timeZone, weekOffset]);
+  const days = useMemo(() => weekDays(timeZone, weekOffset), [timeZone, weekOffset]);
 
   const weekShifts = useMemo(() => {
     if (!data) return [];
@@ -152,10 +171,20 @@ export function ScheduleView() {
   }
 
   const rescue = data.rescue;
-  const covered = weekShifts.filter((s) => s.assignedEmployeeId).length;
-  const filling = weekShifts.filter((s) => rescue.active && rescue.shiftId === s.id).length;
-  const unfilled = weekShifts.length - covered - filling;
-  const selected = weekShifts.find((s) => s.id === selectedId) ?? null;
+  const roles = Array.from(new Set(data.shifts.map((s) => s.role))).sort();
+  // "All roles" is the unified view; picking a type narrows every part of the
+  // screen at once — calendar, counts and the attention banner.
+  const visibleShifts = roleFilter === "all" ? weekShifts : weekShifts.filter((s) => s.role === roleFilter);
+  const covered = visibleShifts.filter((s) => s.assignedEmployeeId).length;
+  const filling = visibleShifts.filter((s) => rescue.active && rescue.shiftId === s.id).length;
+  const unfilled = visibleShifts.length - covered - filling;
+  const selected = visibleShifts.find((s) => s.id === selectedId) ?? null;
+
+  // Every slot that still has nobody on it. Surfaced, never acted on: a rescue
+  // only ever starts from an explicit click here or a VoiceOS command.
+  const problemSlots = visibleShifts
+    .filter((s) => !s.assignedEmployeeId && !(rescue.active && rescue.shiftId === s.id))
+    .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
 
   const findCoverage = async (shiftId: string) => {
     setBusyId(shiftId);
@@ -176,7 +205,9 @@ export function ScheduleView() {
     }
   };
 
-  const weekLabel = `${days[0].date.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} – ${days[6].date.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`;
+  const shortDay = (key: string) =>
+    new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", day: "numeric", month: "short" }).format(new Date(`${key}T00:00:00Z`));
+  const weekLabel = `${shortDay(days[0].key)} – ${shortDay(days[6].key)}`;
 
   return (
     <main className="page">
@@ -186,6 +217,25 @@ export function ScheduleView() {
           <h1 className="page-title">{data.venue.name}</h1>
         </div>
         <div className="week-nav">
+          <label className="role-filter">
+            <span className="visually-hidden">Filter by role</span>
+            <select className="select" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
+              <option value="all">All roles</option>
+              {roles.map((role) => (
+                <option key={role} value={role}>
+                  {role}
+                </option>
+              ))}
+            </select>
+          </label>
+          {data.canManage && (
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => setEditorFor(null)}
+            >
+              Add shift
+            </button>
+          )}
           <button className="btn btn-ghost btn-sm" onClick={() => setWeekOffset((w) => w - 1)} aria-label="Previous week">
             ‹
           </button>
@@ -227,6 +277,93 @@ export function ScheduleView() {
 
       {error && <p className="notice">{error}</p>}
 
+      {editorFor !== undefined && (
+        <ShiftForm
+          shift={editorFor}
+          people={data.people}
+          timeZone={timeZone}
+          onSaved={() => {
+            setEditorFor(undefined);
+            load();
+          }}
+          onCancel={() => setEditorFor(undefined)}
+        />
+      )}
+
+      {rescue.active && (
+        <section className="live" aria-label="Live coverage call" aria-live="polite">
+          <div className="live-head">
+            <span className="live-pill">
+              <span className="live-dot" />
+              Live
+            </span>
+            <span className="live-shift">
+              {(() => {
+                const target = data.shifts.find((s) => s.id === rescue.shiftId);
+                if (!target) return "Finding cover";
+                return `${target.role} · ${new Intl.DateTimeFormat("en-GB", { timeZone, weekday: "short", day: "numeric", month: "short" }).format(new Date(target.startsAt))} ${formatRange(target.startsAt, target.endsAt, timeZone)}`;
+              })()}
+            </span>
+          </div>
+
+          <p className="live-headline">
+            {rescue.callingName
+              ? `Calling ${rescue.callingName}`
+              : rescue.confirmedBySms
+                ? "Cover confirmed"
+                : "Working through the team"}
+            {rescue.callingLanguage && <span className="live-language"> speaking {rescue.callingLanguage}</span>}
+          </p>
+
+          <ul className="live-feed">
+            {rescue.timeline.slice(-6).map((entry, index, all) => (
+              <li key={entry.id} className={`live-event${index === all.length - 1 ? " live-event-latest" : ""}`}>
+                <time dateTime={entry.timestamp}>{formatTime(entry.timestamp, timeZone)}</time>
+                <span>{entry.message}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {problemSlots.length > 0 && (
+        <section className="attention" aria-label="Shifts needing cover">
+          <div className="attention-head">
+            <h2 className="attention-title">
+              {problemSlots.length === 1
+                ? "1 shift has nobody on it"
+                : `${problemSlots.length} shifts have nobody on them`}
+            </h2>
+            <p className="attention-note">
+              Nothing is dialled until you start it here, or a manager asks by voice.
+            </p>
+          </div>
+          <ul className="attention-list">
+            {problemSlots.map((shift) => (
+              <li key={shift.id} className="attention-row">
+                <button className="attention-slot" onClick={() => setSelectedId(shift.id)}>
+                  <span className="attention-when">
+                    {new Intl.DateTimeFormat("en-GB", { timeZone, weekday: "short", day: "numeric", month: "short" }).format(new Date(shift.startsAt))}
+                    {" · "}
+                    {formatRange(shift.startsAt, shift.endsAt, timeZone)}
+                  </span>
+                  <span className="attention-role">{shift.role}</span>
+                </button>
+                {data.canManage && (
+                  <button
+                    className="btn btn-primary btn-sm"
+                    disabled={busyId === shift.id || rescue.active}
+                    onClick={() => findCoverage(shift.id)}
+                  >
+                    {busyId === shift.id ? "Starting…" : rescue.active ? "Busy" : "Find coverage"}
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <section className="calendar" aria-label="Week schedule">
         <div className="calendar-hours" aria-hidden="true">
           {Array.from({ length: DAY_END - DAY_START + 1 }, (_, i) => (
@@ -237,17 +374,15 @@ export function ScheduleView() {
         </div>
 
         <div className="calendar-grid">
-          {days.map(({ key, date }) => {
+          {days.map(({ key, weekday, dayNumber }) => {
             const isToday = key === localDayKey(now.toISOString(), timeZone);
-            const dayShifts = weekShifts.filter((s) => localDayKey(s.startsAt, timeZone) === key);
+            const dayShifts = visibleShifts.filter((s) => localDayKey(s.startsAt, timeZone) === key);
 
             return (
               <div key={key} className={`calendar-day${isToday ? " calendar-day-today" : ""}`}>
                 <div className="calendar-day-head">
-                  <span className="calendar-day-name">
-                    {date.toLocaleDateString("en-GB", { weekday: "short" })}
-                  </span>
-                  <span className="calendar-day-num">{date.getDate()}</span>
+                  <span className="calendar-day-name">{weekday}</span>
+                  <span className="calendar-day-num">{dayNumber}</span>
                 </div>
 
                 <div className="calendar-slots">
@@ -264,19 +399,30 @@ export function ScheduleView() {
                       <button
                         key={shift.id}
                         className={`shift-block shift-block-${state}${selectedId === shift.id ? " shift-block-selected" : ""}`}
-                        style={{
-                          top: `${top * 100}%`,
-                          height: `${Math.max(6, (bottom - top) * 100)}%`,
-                          left: `calc(${(lane / lanes) * 100}% + 2px)`,
-                          width: `calc(${(1 / lanes) * 100}% - 4px)`,
-                          right: "auto",
-                        }}
+                        style={(() => {
+                          // Equal division makes 3+ overlaps unreadable, so blocks
+                          // keep a minimum width and cascade over each other.
+                          const width = Math.max(1 / lanes, 0.62);
+                          const step = lanes > 1 ? (1 - width) / (lanes - 1) : 0;
+                          return {
+                            top: `${top * 100}%`,
+                            height: `${Math.max(6, (bottom - top) * 100)}%`,
+                            left: `calc(${lane * step * 100}% + 2px)`,
+                            width: `calc(${width * 100}% - 4px)`,
+                            right: "auto",
+                            zIndex: lane + 1,
+                          };
+                        })()}
                         onClick={() => setSelectedId(shift.id === selectedId ? null : shift.id)}
                       >
                         <span className="shift-block-time">{formatTime(shift.startsAt, timeZone)}</span>
                         <span className="shift-block-role">{shift.role}</span>
                         <span className="shift-block-person">
-                          {person ? person.name : isFilling ? rescueLabel(rescue) : "Unfilled"}
+                          {person
+                            ? person.name
+                            : isFilling
+                              ? `Calling ${(rescue.callingName ?? "").split(" ")[0] || "…"}`
+                              : "Unfilled"}
                         </span>
                       </button>
                     );
@@ -297,6 +443,16 @@ export function ScheduleView() {
           canManage={data.canManage}
           busy={busyId === selected.id}
           onFindCoverage={() => findCoverage(selected.id)}
+          onEdit={() =>
+            setEditorFor({
+              id: selected.id,
+              role: selected.role,
+              startsAt: selected.startsAt,
+              endsAt: selected.endsAt,
+              pay: selected.pay,
+              assignedEmployeeId: selected.assignedEmployeeId,
+            })
+          }
           onClose={() => setSelectedId(null)}
         />
       )}
@@ -327,6 +483,7 @@ function ShiftDetail({
   canManage,
   busy,
   onFindCoverage,
+  onEdit,
   onClose,
 }: {
   shift: Shift;
@@ -336,6 +493,7 @@ function ShiftDetail({
   canManage: boolean;
   busy: boolean;
   onFindCoverage: () => void;
+  onEdit: () => void;
   onClose: () => void;
 }) {
   const isFilling = rescue.active && rescue.shiftId === shift.id;
@@ -344,9 +502,16 @@ function ShiftDetail({
     <section className="detail-panel" aria-label={`${shift.role} shift detail`}>
       <div className="card-head">
         <h2 className="card-title">{shift.role}</h2>
-        <button className="btn btn-ghost btn-sm" onClick={onClose}>
-          Close
-        </button>
+        <div className="form-actions">
+          {canManage && (
+            <button className="btn btn-ghost btn-sm" onClick={onEdit}>
+              Edit
+            </button>
+          )}
+          <button className="btn btn-ghost btn-sm" onClick={onClose}>
+            Close
+          </button>
+        </div>
       </div>
 
       <div className="detail-list">

@@ -902,10 +902,10 @@ body {
 
 .calendar-grid {
   display: grid;
-  grid-template-columns: repeat(7, minmax(116px, 1fr));
+  grid-template-columns: repeat(7, minmax(150px, 1fr));
   gap: var(--spacing-8);
   flex: 1;
-  min-width: 840px;
+  min-width: 1080px;
 }
 
 .calendar-day-head {
@@ -977,7 +977,7 @@ body {
   transition: filter 0.15s ease;
 }
 
-.shift-block:hover { filter: brightness(0.97); }
+.shift-block:hover { filter: brightness(0.97); z-index: 9 !important; }
 
 .shift-block-time {
   font-size: var(--text-caption);
@@ -1152,3 +1152,158 @@ body {
   .calendar-hours { display: none; }
   .coverage-zone { margin-left: 0; }
 }
+
+/* ------------------------------------------------- Role filter + attention */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.role-filter { display: inline-flex; }
+
+.select {
+  font-family: var(--font-graphik);
+  font-size: var(--text-body-sm);
+  font-weight: var(--font-weight-medium);
+  padding: var(--spacing-8) var(--spacing-12);
+  border-radius: var(--radius-inputs);
+  border: 1px solid var(--hairline-strong);
+  background: var(--color-paper-white);
+  color: var(--color-deep-forest);
+  cursor: pointer;
+}
+
+/* Surfaces problems; never acts on its own. */
+.attention {
+  background: var(--surface-paper-white);
+  border: 1px solid var(--hairline);
+  border-left: 4px solid var(--color-ink-black);
+  border-radius: var(--radius-cards);
+  padding: var(--spacing-20) var(--spacing-24);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-16);
+}
+
+.attention-head { display: flex; flex-direction: column; gap: var(--spacing-4); }
+
+.attention-title {
+  margin: 0;
+  font-family: var(--font-graphik);
+  font-size: var(--text-heading-sm);
+  line-height: var(--leading-heading-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-ink-black);
+}
+
+.attention-note {
+  margin: 0;
+  font-size: var(--text-body-sm);
+  color: var(--color-charcoal);
+}
+
+.attention-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--spacing-8); }
+
+.attention-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-16);
+  background: var(--color-pale-sage);
+  border-radius: var(--radius-buttons);
+  padding: var(--spacing-12) var(--spacing-16);
+  flex-wrap: wrap;
+}
+
+.attention-slot {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-12);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-graphik);
+  flex-wrap: wrap;
+}
+
+.attention-when {
+  font-size: var(--text-body-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-charcoal);
+}
+
+.attention-role {
+  font-size: var(--text-body);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-deep-forest);
+}
+
+/* ------------------------------------------------------------ Live rescue */
+
+/* While a call is happening this is the loudest thing on the page. */
+.live {
+  background: var(--surface-forest-dark);
+  color: var(--color-paper-white);
+  border-radius: var(--radius-cards);
+  padding: var(--spacing-24);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-16);
+}
+
+.live-head {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-16);
+  flex-wrap: wrap;
+}
+
+.live .live-pill {
+  background: var(--color-chartreuse-lime);
+  color: var(--color-ink-black);
+}
+
+.live-shift {
+  font-size: var(--text-body-sm);
+  color: rgba(252, 252, 252, 0.72);
+}
+
+.live-headline {
+  margin: 0;
+  font-family: var(--font-graphik);
+  font-size: var(--text-heading);
+  line-height: var(--leading-heading);
+  letter-spacing: var(--tracking-heading);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-paper-white);
+}
+
+.live-language { color: var(--color-chartreuse-lime); }
+
+.live-feed {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-8);
+  border-top: 1px solid var(--hairline-inverse);
+  padding-top: var(--spacing-16);
+}
+
+.live-event {
+  display: flex;
+  gap: var(--spacing-16);
+  font-size: var(--text-body-sm);
+  color: rgba(252, 252, 252, 0.72);
+}
+
+.live-event time { font-variant-numeric: tabular-nums; flex: none; }
+.live-event-latest { color: var(--color-paper-white); }
