@@ -352,6 +352,7 @@ export function ScheduleView() {
       {error && <p className="notice">{error}</p>}
 
       {editorFor !== undefined && (
+        <div className="shift-form-anchor">
         <ShiftForm
           shift={editorFor}
           people={data.people}
@@ -362,26 +363,23 @@ export function ScheduleView() {
           }}
           onCancel={() => setEditorFor(undefined)}
         />
+        </div>
       )}
 
+      {/* Who is being called, and how far the run has got, is the dock's job at
+          the bottom of the screen. This panel is only the call itself, so the
+          same sentence is not repeated in two places. */}
       {rescue.active && rescue.timeline.length > 0 && (
-        <section className="live-timeline" aria-label="Active rescue progress">
-          <div className="live-timeline-head">
-            <div className="live-pill">
-              <span className="live-dot" />
-              <span>Rescue in progress</span>
-            </div>
-            <span className="live-status">{rescue.status.replace(/_/g, " ")}</span>
+        <section className="live" aria-label="Live call">
+          <div className="live-head">
+            <span className="live-shift">
+              {(() => {
+                const target = data.shifts.find((s) => s.id === rescue.shiftId);
+                if (!target) return "Finding cover";
+                return `Covering ${target.role} · ${new Intl.DateTimeFormat("en-GB", { timeZone, weekday: "short", day: "numeric", month: "short" }).format(new Date(target.startsAt))} ${formatRange(target.startsAt, target.endsAt, timeZone)}`;
+              })()}
+            </span>
           </div>
-
-          <p className="live-headline">
-            {rescue.callingName
-              ? `Calling ${rescue.callingName}`
-              : rescue.confirmedBySms
-                ? "Cover confirmed"
-                : "Working through the team"}
-            {rescue.callingLanguage && <span className="live-language"> speaking {rescue.callingLanguage}</span>}
-          </p>
 
           <div className="live-columns">
             <div className="live-column">
@@ -497,7 +495,10 @@ export function ScheduleView() {
           onAssign={(empId) => assignShift(selected.id, empId)}
           onFindCoverage={() => findCoverage(selected.id)}
           onUnfulfillAndRescue={(shiftId) => markUnfulfilledAndRescue(shiftId)}
-          onEdit={() =>
+          onEdit={() => {
+            requestAnimationFrame(() =>
+              document.querySelector(".shift-form-anchor")?.scrollIntoView({ behavior: "smooth", block: "center" }),
+            );
             setEditorFor({
               id: selected.id,
               role: selected.role,
@@ -505,8 +506,8 @@ export function ScheduleView() {
               endsAt: selected.endsAt,
               pay: selected.pay,
               assignedEmployeeId: selected.assignedEmployeeId,
-            })
-          }
+            });
+          }}
           onClose={() => setSelectedId(null)}
         />
       )}
@@ -640,7 +641,13 @@ function ShiftDetail({
           </span>
         </div>
         <div className="detail-row">
-          <span className="detail-label">Starts</span>
+          <span className="detail-label">
+            {new Date(shift.endsAt) < new Date()
+              ? "Finished"
+              : new Date(shift.startsAt) < new Date()
+                ? "Running"
+                : "Starts"}
+          </span>
           <span className="detail-value">{describeRelative(shift.startsAt, shift.endsAt)}</span>
         </div>
         <div className="detail-row">
@@ -654,7 +661,7 @@ function ShiftDetail({
           </div>
         )}
         <div className="detail-row">
-          <span className="detail-label">Assigned</span>
+          <span className="detail-label">Assigned to</span>
           <span className="detail-value">
             {canManage ? (
               <select
@@ -663,7 +670,7 @@ function ShiftDetail({
                 onChange={(e) => onAssign(e.target.value || null)}
                 disabled={busy}
               >
-                <option value="">-- Unassigned --</option>
+                <option value="">Nobody assigned</option>
                 {people.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name} ({p.role})
@@ -707,7 +714,11 @@ function ShiftDetail({
                 onClick={() => onUnfulfillAndRescue(shift.id)}
                 disabled={busy || rescue.active}
               >
-                {busy ? "Starting…" : rescue.active ? "Covering another shift" : "Unassign & Schedule Rescue"}
+                {busy
+                  ? "Starting…"
+                  : rescue.active
+                    ? "Busy with another shift"
+                    : "Replace this person"}
               </button>
             </>
           )}

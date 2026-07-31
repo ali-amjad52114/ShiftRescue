@@ -1355,8 +1355,6 @@ body {
   display: grid;
   grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
   gap: var(--spacing-24);
-  border-top: 1px solid var(--hairline-inverse);
-  padding-top: var(--spacing-16);
 }
 
 .live-column { display: flex; flex-direction: column; gap: var(--spacing-12); min-width: 0; }
