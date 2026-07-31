@@ -3,12 +3,49 @@
 Public surface, unchanged from the original stubs so `src/lib/workflow/` needs no edits:
 
 ```ts
-startA1MobileCall({ workerId, phone, language, shiftId }) // -> { success, callId?, mode?, error? }
-sendA1MobileSms({ phone, message })                       // -> { success, messageId?, status?, error? }
+startA1MobileCall({ workerId, phone, language, shiftId, attemptId?, workerName?, shift? })
+  // -> { success, callId?, attemptId?, mode?, error? }
+
+sendShiftConfirmationSms({ phone, language, workerName, shift })
+  // -> { success, messageId?, status?, error? }   localized, send on acceptance
+
+sendA1MobileSms({ phone, message })
+  // -> { success, messageId?, status?, error? }
+
+getCallOutcome(callId)                 // -> CallStatus, one shot
+waitForCallOutcome(callId, { timeoutMs, intervalMs })  // -> CallStatus, polls
 ```
 
-`SIMULATE=true` makes both return fake IDs without touching the network, so the
+`SIMULATE=true` makes these return fake IDs without touching the network, so the
 backend and dashboard can be developed without burning real calls.
+
+## Attempt IDs
+
+Every call attempt gets an `attemptId` (generated if not supplied, and always
+returned). Pass it into the workflow state as `activeAttemptId`, have the
+assistant echo it back with the decision, and **reject any decision whose
+attemptId is not the active one**.
+
+Without this, one duplicate `declined` webhook advances the worker index twice
+and skips a worker live on stage. Vapi does deliver duplicate events.
+
+## Call outcomes
+
+A call can end without any decision — nobody answered, voicemail picked up, the
+trunk failed, or they hung up mid-sentence. `getCallOutcome` classifies
+`endedReason` into something the workflow can act on:
+
+| Outcome | Meaning | What the workflow should do |
+|---|---|---|
+| `in-progress` | still live | wait |
+| `answered` | a human picked up (may still have made no decision) | wait for the tool, then time out |
+| `no-answer` | did not answer, busy, voicemail | treat as a failed attempt, move on |
+| `failed` | SIP or pipeline error | record the error honestly, move on |
+| `unknown` | ended with no reason given | treat as failed rather than hanging |
+
+`answered` does **not** mean a decision was made. Without this, a worker who
+ignores the call leaves the demo waiting forever, which looks identical to a
+crash.
 
 ## Origination
 
@@ -40,6 +77,12 @@ node --env-file=.env src/integrations/a1mobile/spike-sip-trunk.mjs call +1XXXXXX
 
 Only OTP-verified numbers may be called or texted. Verify every demo phone
 before anything else — it gates the entire flow.
+
+**Calls and texts come from different numbers.** Calls go out as our claimed
+number `+16676650161` over the SIP trunk. SMS goes out as a1mobile's shared
+sender `+19102121210` — tested, and it ignores both `from` and `sender` in the
+request body, so this is not configurable. Say "sent through a1mobile", not
+"from our a1mobile number", when describing the SMS.
 
 `spike-sip-trunk.mjs trunk` resolves `sip.telnyx.com` to A records first,
 because Vapi rejects FQDNs in `gateways` with a 400.
