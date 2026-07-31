@@ -1,263 +1,72 @@
 # ShiftRescue
 
-ShiftRescue is a hackathon MVP that fills an uncovered shift through a voice-first, multilingual workflow. A manager starts the rescue with VoiceOS, workers receive sequential calls through Vapi and a1mobile, and an acceptance triggers the scheduling, calendar, Slack, and SMS confirmation steps.
+## Project description
 
-## Demo workflow
+ShiftRescue is a hackathon MVP that fills one uncovered shift through a voice-first, multilingual workflow. VoiceOS captures the manager's request, Vapi and OpenAI call workers through a1mobile, and the dashboard shows progress and proof.
 
-```text
-Manager speaks a command through VoiceOS
-        |
-        v
-VoiceOS sends structured shift details to the backend
-        |
-        v
-Backend selects the first hardcoded worker
-        |
-        v
-Backend asks Vapi to start the call
-        |
-        v
-Vapi uses the a1mobile phone number
-        |
-        v
-Vapi + OpenAI conducts the multilingual conversation
-        |
-        v
-Vapi sends the worker's decision back to the backend
-        |
-        v
-Backend decides the next task
-        |
-        v
-Declined: call the next worker
-Accepted: trigger VoiceOS again
-        |
-        v
-VoiceOS updates the scheduling app, Google Calendar, and Slack
-        |
-        v
-Backend asks a1mobile to send a confirmation SMS
-        |
-        v
-Dashboard shows the verified results
-```
-
-## Architecture
-
-### VoiceOS starts and completes the workflow
-
-The manager begins with a spoken command such as:
-
-> Find coverage for today's Kitchen Assistant shift from 6 PM to 10 PM.
-
-VoiceOS extracts the required shift details and sends them to the backend:
-
-```json
-{
-  "role": "Kitchen Assistant",
-  "date": "July 31",
-  "startTime": "6:00 PM",
-  "endTime": "10:00 PM",
-  "location": "Downtown San Francisco",
-  "pay": "$24 per hour"
-}
-```
-
-After a worker accepts, VoiceOS is used again to update the scheduling application, create a Google Calendar event, and post a Slack confirmation.
-
-### Backend orchestrates the sequence
-
-The minimal Next.js backend:
-
-- stores the current in-memory demo state;
-- selects the next hardcoded worker;
-- starts each Vapi call;
-- receives and evaluates worker decisions;
-- triggers VoiceOS after an acceptance;
-- requests the confirmation SMS; and
-- exposes status and proof IDs to the dashboard.
-
-It does not conduct voice conversations or perform desktop actions itself.
-
-### Vapi and OpenAI conduct the conversation
-
-The Vapi assistant calls from the a1mobile number, speaks in the worker's preferred language, explains the supplied shift details, handles interruptions, and returns one structured decision:
-
-```json
-{
-  "workerId": "worker-2",
-  "decision": "accepted"
-}
-```
-
-Allowed decisions are `accepted`, `declined`, and `needs_clarification`. The assistant must not invent pay, benefits, transportation, overtime, flexible hours, approval requirements, or other details not supplied by the backend.
-
-### a1mobile provides telephony and SMS
-
-a1mobile owns the real phone-number layer used for outbound Vapi calls and sends the final confirmation SMS. Call and message IDs are retained as demo proof.
-
-### Dashboard displays progress
-
-The dashboard is read-only apart from a **Reset Demo** control. It polls `GET /api/status` every one or two seconds and displays:
-
-- the open shift;
-- the worker currently being called;
-- the conversation language;
-- workflow status;
-- an event timeline; and
-- final call, calendar, Slack, and SMS proof IDs.
-
-## Workflow state
+## Exact workflow
 
 ```text
-WAITING_FOR_MANAGER_COMMAND
--> SHIFT_CREATED
--> CALLING_WORKER_1
--> WORKER_1_DECLINED
--> CALLING_WORKER_2
--> WORKER_2_ACCEPTED
--> TRIGGERING_VOICEOS
--> VOICEOS_COMPLETE
--> SENDING_SMS
--> COMPLETE
+Manager gives a VoiceOS command
+-> VoiceOS sends shift details to the backend
+-> Backend selects a worker
+-> Vapi starts a call using the a1mobile number
+-> Vapi + OpenAI conducts a multilingual conversation
+-> Worker decision returns to the backend
+-> Backend calls the next worker or triggers VoiceOS actions
+-> VoiceOS updates the schedule, Calendar, and Slack
+-> a1mobile sends a confirmation SMS
+-> Dashboard displays the workflow and proof
 ```
 
-## Demo workers
+## Folder ownership
 
-```ts
-const workers = [
-  {
-    id: "worker-1",
-    name: "Maria",
-    phone: "TEST_PHONE_1",
-    language: "Spanish"
-  },
-  {
-    id: "worker-2",
-    name: "Ahmed",
-    phone: "TEST_PHONE_2",
-    language: "Urdu"
-  },
-  {
-    id: "worker-3",
-    name: "John",
-    phone: "TEST_PHONE_3",
-    language: "English"
-  }
-];
+- Person 1: `src/integrations/a1mobile/`
+- Person 2: `src/integrations/vapi/`, `src/app/dashboard/`, and `src/components/dashboard/`
+- Person 3: `src/app/api/`, `src/lib/workflow/`, and `src/data/`
+- Person 4: `src/integrations/voiceos/`
+
+See `docs/TEAM-OWNERSHIP.md` for shared-file coordination and suggested branch names.
+
+## Required environment variables
+
+Copy `.env.example` to `.env.local` and add sponsor credentials when they are available:
+
+```env
+OPENAI_API_KEY=
+VAPI_API_KEY=
+VAPI_ASSISTANT_ID=
+A1MOBILE_API_KEY=
+A1MOBILE_PHONE_NUMBER=
+VOICEOS_API_KEY=
+DEMO_WORKER_1_PHONE=
+DEMO_WORKER_2_PHONE=
+DEMO_WORKER_3_PHONE=
 ```
 
-## API contract
+Never commit real credentials.
 
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| `POST` | `/api/voiceos-command` | Receive the manager's structured shift command and begin calling workers |
-| `POST` | `/api/vapi-result` | Receive a worker decision and continue the sequence |
-| `POST` | `/api/voiceos-result` | Store scheduling, calendar, and Slack proof, then request an SMS |
-| `GET` | `/api/status` | Return the current state, worker, language, timeline, and proof IDs |
-| `POST` | `/api/reset` | Reset the in-memory demo state |
+## How to run the project
 
-### Vapi result
-
-```json
-{
-  "workerId": "worker-1",
-  "decision": "declined"
-}
+```bash
+npm install
+npm run dev
 ```
 
-If the worker declines, the backend calls the next worker. If the worker accepts, the backend saves the assignment and triggers VoiceOS. A clarification may be repeated once. Results received after an acceptance are ignored.
+Open `http://localhost:3000` for the project page or `http://localhost:3000/dashboard` for the dashboard placeholder. Run `npm run typecheck` to verify the shared TypeScript contracts and `npm run build` to create a production build.
 
-### VoiceOS result
+## Currently mocked integrations
 
-```json
-{
-  "success": true,
-  "scheduleUpdated": true,
-  "calendarEventId": "calendar_123",
-  "slackMessageId": "slack_123"
-}
-```
+- a1mobile outbound calling returns `mock-a1mobile-call-id`.
+- a1mobile SMS returns `mock-a1mobile-message-id` with a `sent` status.
+- Vapi shift calls return `mock-vapi-call-id`.
+- VoiceOS completion returns mock schedule, Calendar, and Slack proof.
+- All five API routes return clearly labeled mock responses.
 
-The backend stores the proof, requests the confirmation SMS, and marks the workflow complete after the SMS request succeeds.
+Mocks exist only so teammates can integrate in parallel. They must not be presented as real sponsor proof in the final demo.
 
-### Status response
+## Final MVP boundary
 
-```json
-{
-  "status": "COMPLETE",
-  "currentWorker": "Ahmed",
-  "language": "Urdu",
-  "timeline": [],
-  "proof": {
-    "callId": "call_123",
-    "calendarEventId": "calendar_123",
-    "slackMessageId": "slack_123",
-    "smsMessageId": "sms_123"
-  }
-}
-```
+The project supports only one manager VoiceOS command, one uncovered shift, three hardcoded workers, sequential calls, one decline, one acceptance, three demonstration languages, one VoiceOS schedule update, one Calendar event, one Slack message, one confirmation SMS, one dashboard page, and one in-memory workflow state.
 
-## Team responsibilities
-
-### Person 1 - a1mobile
-
-- Configure the a1mobile phone number for Vapi.
-- Verify one real outbound call.
-- Send one real confirmation SMS.
-- Return call and SMS proof IDs.
-
-### Person 2 - Vapi, OpenAI, and dashboard
-
-- Build one multilingual Vapi assistant using OpenAI.
-- Support English, Spanish, and Urdu or Punjabi.
-- Return a clear structured worker decision.
-- Build the single-page status dashboard and timeline.
-
-### Person 3 - workflow backend
-
-- Build the five Next.js API routes.
-- Maintain one in-memory state object.
-- Orchestrate one shift across three hardcoded workers.
-- Connect VoiceOS, Vapi, a1mobile, and the dashboard.
-
-### Person 4 - VoiceOS
-
-- Capture and structure the manager's voice command.
-- Update the scheduling application after acceptance.
-- Create the Google Calendar event and Slack message.
-- Return visible proof to the backend.
-
-## Definition of done
-
-The demo succeeds when this complete path works reliably:
-
-```text
-VoiceOS command
--> first worker call
--> decline
--> second worker call
--> acceptance
--> VoiceOS application actions
--> confirmation SMS
--> dashboard proof
-```
-
-## MVP boundary
-
-This project intentionally includes only:
-
-- one manager command;
-- one uncovered shift;
-- three hardcoded workers;
-- one decline and one acceptance;
-- multilingual calling;
-- one scheduling update;
-- one calendar event;
-- one Slack message;
-- one confirmation SMS; and
-- one dashboard timeline.
-
-Do not add databases, authentication, queues, Redis, worker-matching algorithms, parallel calls, microservices, generic workflow engines, production concurrency, retry infrastructure, or unrelated features until the end-to-end demo is reliable.
-
-> A simple, slightly hardcoded end-to-end demo is better than a sophisticated system that fails during judging.
+Do not add authentication, databases, queues, microservices, worker ranking, parallel calling, production infrastructure, or features outside this boundary.
