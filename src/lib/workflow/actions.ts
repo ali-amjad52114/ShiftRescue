@@ -51,7 +51,7 @@ function advanceToNextWorker(state: WorkflowState): boolean {
  * Vapi answers as soon as the call is queued, so this returns while the
  * conversation is still live; the decision arrives later via the webhook.
  */
-async function dialCurrentWorker(state: WorkflowState): Promise<void> {
+export async function dialCurrentWorker(state: WorkflowState): Promise<void> {
   while (state.shift && state.status === "CALLING_WORKER") {
     const worker = state.workers[state.currentWorkerIndex];
     if (!worker) return;

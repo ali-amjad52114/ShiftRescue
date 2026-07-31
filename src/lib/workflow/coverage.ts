@@ -1,3 +1,4 @@
+import { dialCurrentWorker } from "./actions";
 import { getShift, assignShift, type ScheduledShift } from "../shifts/store";
 import { getWorkflowState, updateWorkflowState } from "./state";
 import type { Shift, WorkflowState } from "./types";
@@ -66,12 +67,14 @@ export async function startCoverage(shiftId: string): Promise<WorkflowState> {
       event(`Looking for cover for the ${shift.role} shift`),
       event(`Calling ${first.name} in ${first.language}`),
     ];
+    await dialCurrentWorker(next);
   } else {
     next.timeline = [event("No active staff on the roster to call")];
     next.status = "INCOMPLETE";
+    await updateWorkflowState(next);
   }
 
-  return updateWorkflowState(next);
+  return getWorkflowState();
 }
 
 function event(message: string) {
