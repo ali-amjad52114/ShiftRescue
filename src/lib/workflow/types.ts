@@ -32,9 +32,12 @@ export interface Shift {
   id: string;
   role: string;
   /** Absolute instants, plus the zone the shift was scheduled in. */
-  startsAt: string;
-  endsAt: string;
-  timeZone: string;
+  startsAt?: string;
+  endsAt?: string;
+  timeZone?: string;
+  date?: string;
+  startTime?: string;
+  endTime?: string;
   location: string;
   pay: string;
   assignedWorkerId: string | null;
