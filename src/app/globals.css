@@ -886,7 +886,6 @@ body {
   border: 1px solid var(--hairline);
   border-radius: var(--radius-cards);
   padding: var(--spacing-20);
-  overflow-x: auto;
 }
 
 .calendar-hours {
@@ -908,10 +907,10 @@ body {
 
 .calendar-grid {
   display: grid;
-  grid-template-columns: repeat(7, minmax(150px, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: var(--spacing-8);
   flex: 1;
-  min-width: 1080px;
+  min-width: 0;
 }
 
 .calendar-day-head {
@@ -1013,24 +1012,28 @@ body {
 
 /* Distinct color accents based on shift role */
 .shift-block-role-kitchen.shift-block-covered {
-  background: #1b4332;
   border-left: 4px solid #74c69d;
 }
 
 .shift-block-role-server.shift-block-covered {
-  background: #081c15;
   border-left: 4px solid var(--color-chartreuse-lime);
 }
 
 .shift-block-role-bartender.shift-block-covered {
-  background: #2d3142;
   border-left: 4px solid #ef8354;
 }
 
 .shift-block-role-manager.shift-block-covered {
-  background: #2b2d42;
   border-left: 4px solid #8d99ae;
 }
+
+/* Distinct background colors for different assigned workers */
+.shift-block-worker-0.shift-block-covered { background: #043f2e; color: #fcfcfc; }
+.shift-block-worker-1.shift-block-covered { background: #1e3a8a; color: #fcfcfc; }
+.shift-block-worker-2.shift-block-covered { background: #4c1d95; color: #fcfcfc; }
+.shift-block-worker-3.shift-block-covered { background: #701a75; color: #fcfcfc; }
+.shift-block-worker-4.shift-block-covered { background: #134e4a; color: #fcfcfc; }
+.shift-block-worker-5.shift-block-covered { background: #312e81; color: #fcfcfc; }
 
 /* An unfilled shift is the problem this product solves — it reads as a hole. */
 .shift-block-open {
