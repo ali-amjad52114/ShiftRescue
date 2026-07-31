@@ -1287,7 +1287,8 @@ body {
 /* ------------------------------------------------------------ Live rescue */
 
 /* While a call is happening this is the loudest thing on the page. */
-.live {
+.live,
+.live-timeline {
   background: var(--surface-forest-dark);
   color: var(--color-paper-white);
   border-radius: var(--radius-cards);
@@ -1304,7 +1305,8 @@ body {
   flex-wrap: wrap;
 }
 
-.live .live-pill {
+.live .live-pill,
+.live-timeline .live-pill {
   background: var(--color-chartreuse-lime);
   color: var(--color-ink-black);
 }
