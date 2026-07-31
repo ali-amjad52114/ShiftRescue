@@ -424,6 +424,11 @@ describe("Workflow Orchestrator Engine", () => {
   });
 
   it("should reject blank Calendar or Slack proof IDs", async () => {
+    // A rescue must have an accepted worker before completion is even
+    // considered, so get past that guard to reach the proof check.
+    await handleVoiceosCommand(command);
+    await submitDecision("accepted");
+
     await expect(
       handleVoiceosResult({
         success: true,
