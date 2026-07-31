@@ -1,4 +1,7 @@
-node_modules/
+# No trailing slash: a worktree setup once committed node_modules as a symlink,
+# which "node_modules/" does not match, and merging it replaced everyone's
+# installed dependencies with a 21-byte file.
+node_modules
 .next/
 .env
 .env.local
