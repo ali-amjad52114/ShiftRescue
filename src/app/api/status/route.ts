@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getWorkflowState } from "@/lib/workflow/state";
+import { getWorkflowState, publicWorkflowState } from "@/lib/workflow/state";
 
 export async function GET() {
   const state = getWorkflowState();
@@ -16,6 +16,6 @@ export async function GET() {
     language: currentWorker ? currentWorker.language : null,
     timeline: state.timeline,
     proof: state.proof,
-    state,
+    state: publicWorkflowState(state),
   });
 }

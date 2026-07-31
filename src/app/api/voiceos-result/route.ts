@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { handleVoiceosResult } from "@/lib/workflow/actions";
+import { publicWorkflowState } from "@/lib/workflow/state";
 
 export async function POST(req: Request) {
   try {
@@ -9,7 +10,7 @@ export async function POST(req: Request) {
       success: true,
       status: state.status,
       proof: state.proof,
-      state,
+      state: publicWorkflowState(state),
     });
   } catch (error: any) {
     return NextResponse.json(

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { handleVapiResult } from "@/lib/workflow/actions";
+import { publicWorkflowState } from "@/lib/workflow/state";
 
 export async function POST(req: Request) {
   try {
@@ -8,7 +9,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: true,
       status: state.status,
-      state,
+      state: publicWorkflowState(state),
     });
   } catch (error: any) {
     return NextResponse.json(
