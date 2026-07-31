@@ -482,7 +482,10 @@ export function ScheduleView() {
                             left: `calc(${lane * step * 100}% + 2px)`,
                             width: `calc(${width * 100}% - 4px)`,
                             right: "auto",
-                            zIndex: lane + 1,
+                            // A shift with nobody on it must never be hidden
+                            // behind a covered one that happens to cascade over
+                            // it — it is the whole point of the screen.
+                            zIndex: state === "open" ? 30 : state === "filling" ? 20 : lane + 1,
                           };
                         })()}
                         onClick={() => setSelectedId(shift.id === selectedId ? null : shift.id)}

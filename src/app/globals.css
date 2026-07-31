@@ -983,7 +983,7 @@ body {
   transition: filter 0.15s ease;
 }
 
-.shift-block:hover { filter: brightness(0.97); z-index: 9 !important; }
+.shift-block:hover { filter: brightness(0.97); z-index: 40 !important; }
 
 .shift-block-time {
   font-size: var(--text-caption);
