@@ -1,5 +1,11 @@
+import { sendShiftConfirmationSms } from "../../integrations/a1mobile/client";
 import { startVapiShiftCall } from "../../integrations/vapi";
-import { resolveShiftWindow } from "../time/schedule";
+import {
+  DEFAULT_TIME_ZONE,
+  formatSpokenDate,
+  formatSpokenTime,
+  resolveShiftWindow,
+} from "../time/schedule";
 import { getWorkflowState, updateWorkflowState } from "./state";
 import type { Shift, WorkerDecision, WorkflowState } from "./types";
 
@@ -62,6 +68,45 @@ async function dialCurrentWorker(state: WorkflowState): Promise<void> {
   }
 }
 
+/**
+ * Texts the worker who took the shift. The message id that comes back is the
+ * proof the dashboard shows, so a failed send leaves the run in SENDING_SMS
+ * rather than inventing one — the same rule the VoiceOS proof follows.
+ */
+async function sendConfirmationSms(state: WorkflowState): Promise<void> {
+  const worker =
+    state.workers.find((w) => w.id === state.shift?.assignedWorkerId) ??
+    state.workers[state.currentWorkerIndex];
+
+  if (!worker || !state.shift) return;
+
+  const { role, location, pay, date, startTime, endTime, startsAt, endsAt, timeZone } = state.shift;
+  const zone = timeZone || DEFAULT_TIME_ZONE;
+
+  const result = await sendShiftConfirmationSms({
+    phone: worker.phone,
+    language: worker.language,
+    workerName: worker.name,
+    shift: {
+      role,
+      location,
+      pay,
+      date: date || (startsAt ? formatSpokenDate(startsAt, zone) : ""),
+      startTime: startTime || (startsAt ? formatSpokenTime(startsAt, zone) : ""),
+      endTime: endTime || (endsAt ? formatSpokenTime(endsAt, zone) : ""),
+    },
+  });
+
+  if (!result.success || !result.messageId) {
+    addTimelineEntry(state, `Confirmation SMS to ${worker.name} failed: ${result.error}`);
+    return;
+  }
+
+  state.proof.smsMessageId = result.messageId;
+  state.status = "COMPLETE";
+  addTimelineEntry(state, "Confirmation SMS sent via a1mobile. Rescue complete!");
+}
+
 const REQUIRED_COMMAND_FIELDS = ["role", "date", "startTime", "endTime", "location"] as const;
 
 export async function handleVoiceosCommand(payload: {
@@ -97,6 +142,13 @@ export async function handleVoiceosCommand(payload: {
     startsAt: window.startsAt,
     endsAt: window.endsAt,
     timeZone: window.timeZone,
+    // The instants are the truth. These are the same window pre-rendered in the
+    // venue's zone for the dashboard card and the confirmation SMS, which both
+    // want a spoken string rather than an ISO timestamp. Derived here because
+    // this is the only place a Shift is created, so they cannot drift apart.
+    date: formatSpokenDate(window.startsAt, window.timeZone),
+    startTime: formatSpokenTime(window.startsAt, window.timeZone),
+    endTime: formatSpokenTime(window.endsAt, window.timeZone),
     location: payload.location,
     pay: payload.pay || "$24 per hour",
     assignedWorkerId: null,
@@ -212,8 +264,11 @@ export async function handleVoiceosResult(payload: {
       state.status = "COMPLETE";
       addTimelineEntry(state, "Confirmation SMS sent via a1mobile. Rescue complete!");
     } else {
+      // VoiceOS did not send the text, so the backend does it now. This is the
+      // last step of the rescue and was the one thing nothing had ever run.
       state.status = "SENDING_SMS";
-      addTimelineEntry(state, "VoiceOS updates complete; awaiting a1mobile confirmation SMS");
+      addTimelineEntry(state, "Requesting a1mobile to send the confirmation SMS");
+      await sendConfirmationSms(state);
     }
   } else {
     state.status = "INCOMPLETE";

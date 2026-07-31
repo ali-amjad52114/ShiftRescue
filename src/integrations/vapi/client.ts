@@ -4,6 +4,11 @@ import {
   vapiAssistantId,
   vapiPhoneNumberId,
 } from "./assistant";
+import {
+  DEFAULT_TIME_ZONE,
+  formatSpokenDate,
+  formatSpokenTime,
+} from "../../lib/time/schedule";
 import { resolveLanguage } from "./prompt";
 import type {
   ShiftCallContext,
@@ -12,40 +17,28 @@ import type {
 } from "./types";
 
 /**
- * Shifts are stored as absolute instants, but the assistant has to say them out
- * loud. These render back into the venue's own zone, in the 12-hour form people
- * actually speak ("Friday, 31 July", "6:00 PM").
+ * Turns backend worker + shift data into the only facts the assistant may speak.
+ *
+ * Shifts are stored as absolute instants, so the spoken date and times are
+ * rendered back into the venue's own zone. The pre-rendered strings on the
+ * shift are preferred when present, and the instants are the fallback, so a
+ * shift written by either shape still reads correctly over the phone.
  */
-function spokenDate(iso: string, timeZone: string): string {
-  return new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  }).format(new Date(iso));
-}
-
-function spokenTime(iso: string, timeZone: string): string {
-  return new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  }).format(new Date(iso));
-}
-
-/** Turns backend worker + shift data into the only facts the assistant may speak. */
 export function buildShiftCallContext(input: StartVapiShiftCallInput): ShiftCallContext {
   const { startsAt, endsAt, timeZone } = input.shift;
+  const zone = timeZone || DEFAULT_TIME_ZONE;
+
+  const spoken = (pre: string | undefined, iso: string | undefined, format: typeof formatSpokenTime) =>
+    pre || (iso ? format(iso, zone) : "");
 
   return {
     workerId: input.workerId,
     workerName: input.workerName,
     language: resolveLanguage(input.language),
     role: input.shift.role,
-    date: spokenDate(startsAt, timeZone),
-    startTime: spokenTime(startsAt, timeZone),
-    endTime: spokenTime(endsAt, timeZone),
+    date: spoken(input.shift.date, startsAt, formatSpokenDate),
+    startTime: spoken(input.shift.startTime, startsAt, formatSpokenTime),
+    endTime: spoken(input.shift.endTime, endsAt, formatSpokenTime),
     location: input.shift.location,
     pay: input.shift.pay,
   };

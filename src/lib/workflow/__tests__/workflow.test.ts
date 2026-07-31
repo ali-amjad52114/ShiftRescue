@@ -167,10 +167,54 @@ describe("Workflow Orchestrator Engine", () => {
       slackMessageId: "slack_1",
     });
 
+    // No a1mobile credentials here, so the send fails. The run must stop at
+    // SENDING_SMS rather than invent a message id it never received.
     expect(state.status).toBe("SENDING_SMS");
     expect(state.proof.smsMessageId).toBeUndefined();
     expect(state.timeline.some((t) => t.message.includes("Rescue complete"))).toBe(false);
-    expect(state.timeline.at(-1)?.message).toContain("awaiting a1mobile");
+    expect(state.timeline.at(-1)?.message).toContain("Confirmation SMS to Maria Alvarez failed");
+  });
+
+  it("should send the confirmation SMS itself when VoiceOS supplies no id", async () => {
+    process.env.SIMULATE = "true";
+    try {
+      await handleVoiceosCommand(command);
+      await handleVapiResult({ workerId: "emp_maria", decision: "accepted" });
+
+      const state = await handleVoiceosResult({
+        success: true,
+        scheduleUpdated: true,
+        calendarEventId: "cal_1",
+        slackMessageId: "slack_1",
+      });
+
+      expect(state.status).toBe("COMPLETE");
+      expect(state.proof.smsMessageId).toMatch(/^sim-sms-/);
+      expect(state.timeline.at(-1)?.message).toContain("Rescue complete");
+    } finally {
+      delete process.env.SIMULATE;
+    }
+  });
+
+  it("should text the worker who accepted, not whoever was mid-call", async () => {
+    process.env.SIMULATE = "true";
+    try {
+      await handleVoiceosCommand(command);
+      await handleVapiResult({ workerId: "emp_ahmed", decision: "accepted" });
+
+      const state = await handleVoiceosResult({
+        success: true,
+        scheduleUpdated: true,
+        calendarEventId: "cal_1",
+        slackMessageId: "slack_1",
+      });
+
+      expect(state.shift?.assignedWorkerId).toBe("emp_ahmed");
+      expect(state.status).toBe("COMPLETE");
+      expect(state.proof.smsMessageId).toBeTruthy();
+    } finally {
+      delete process.env.SIMULATE;
+    }
   });
 
   it("should ignore a duplicate decline from a worker who is no longer being called", async () => {
@@ -198,9 +242,19 @@ describe("Workflow Orchestrator Engine", () => {
 
     expect(state.shift?.startsAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     expect(state.shift?.timeZone).toBeTruthy();
-    expect(new Date(state.shift!.endsAt).getTime()).toBeGreaterThan(
-      new Date(state.shift!.startsAt).getTime(),
+    expect(new Date(state.shift!.endsAt!).getTime()).toBeGreaterThan(
+      new Date(state.shift!.startsAt!).getTime(),
     );
+  });
+
+  it("should pre-render the window for the dashboard and the SMS", async () => {
+    const state = await handleVoiceosCommand(command);
+
+    // ShiftCard and the a1mobile message builders read these directly; an
+    // unpopulated field renders as the literal string "undefined".
+    expect(state.shift?.date).toContain("July");
+    expect(state.shift?.startTime).toMatch(/^\d{1,2}:\d{2} (AM|PM)$/);
+    expect(state.shift?.endTime).toMatch(/^\d{1,2}:\d{2} (AM|PM)$/);
   });
 
   it("should place a call when the manager command arrives", async () => {

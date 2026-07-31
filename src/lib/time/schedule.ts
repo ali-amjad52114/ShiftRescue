@@ -168,6 +168,28 @@ export function formatTime(iso: string, timeZone: string): string {
   );
 }
 
+/**
+ * The forms people say out loud, used both by the phone assistant and by the
+ * confirmation SMS: "Friday, July 31" and "6:00 PM", in the venue's own zone.
+ */
+export function formatSpokenDate(iso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  }).format(new Date(iso));
+}
+
+export function formatSpokenTime(iso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(new Date(iso));
+}
+
 export function formatRange(startsAt: string, endsAt: string, timeZone: string): string {
   return `${formatTime(startsAt, timeZone)}–${formatTime(endsAt, timeZone)}`;
 }
