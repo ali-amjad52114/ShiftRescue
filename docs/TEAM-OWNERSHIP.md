@@ -10,11 +10,14 @@ Person 2 may edit only:
 - `src/app/dashboard/`
 - `src/components/dashboard/`
 
-Person 3 may edit only:
+Person 3 may edit:
 
 - `src/app/api/`
 - `src/lib/workflow/`
 - `src/data/`
+- `src/app/dashboard/`
+- `src/components/dashboard/`
+*(Person 3 owns the orchestrator backend, dashboard frontend integration, and Vercel deployment)*
 
 Person 4 may edit only:
 

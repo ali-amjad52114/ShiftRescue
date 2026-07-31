@@ -19,12 +19,12 @@ Manager gives a VoiceOS command
 -> Dashboard displays the workflow and proof
 ```
 
-## Folder ownership
+## Folder ownership & responsibilities
 
-- Person 1: `src/integrations/a1mobile/`
-- Person 2: `src/integrations/vapi/`, `src/app/dashboard/`, and `src/components/dashboard/`
-- Person 3: `src/app/api/`, `src/lib/workflow/`, and `src/data/`
-- Person 4: `src/integrations/voiceos/`
+- **Person 1**: `src/integrations/a1mobile/` (telephony & SMS verification)
+- **Person 2**: `src/integrations/vapi/` (voice agent prompt & tool calls)
+- **Person 3**: `src/app/api/`, `src/lib/workflow/`, `src/data/`, `src/app/dashboard/`, `src/components/dashboard/` (workflow engine, dashboard frontend integration, and Vercel deployment)
+- **Person 4**: `src/integrations/voiceos/` (VoiceOS desktop actions & command structuring)
 
 See `docs/TEAM-OWNERSHIP.md` for shared-file coordination and suggested branch names.
 
