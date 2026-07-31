@@ -135,7 +135,10 @@ export async function waitForCallOutcome(
   callId: string,
   options: { timeoutMs?: number; intervalMs?: number } = {},
 ): Promise<CallStatus> {
-  const timeoutMs = options.timeoutMs ?? 90_000;
+  // Must outlast the assistant's own maxDurationSeconds (300s), or a long
+  // conversation is classified as finished while the worker is still talking
+  // and the next worker gets dialled over the top of a live call.
+  const timeoutMs = options.timeoutMs ?? 330_000;
   const intervalMs = options.intervalMs ?? 3_000;
   const deadline = Date.now() + timeoutMs;
 

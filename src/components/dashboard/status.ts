@@ -13,25 +13,23 @@ export type StepState = "done" | "active" | "failed" | "pending";
 interface StatusMeta {
   label: string;
   tone: StatusTone;
-  /** Index into WORKFLOW_STEPS that is currently in progress; 5 means all done. */
-  step: number;
 }
 
 const STATUS_META: Record<string, StatusMeta> = {
-  WAITING_FOR_MANAGER_COMMAND: { label: "Waiting for manager command", tone: "idle", step: 0 },
-  SHIFT_CREATED: { label: "Shift created", tone: "active", step: 1 },
-  CALLING_WORKER: { label: "Calling worker", tone: "active", step: 1 },
-  WORKER_DECLINED: { label: "Worker declined", tone: "active", step: 1 },
-  WORKER_ACCEPTED: { label: "Worker accepted", tone: "active", step: 2 },
-  TRIGGERING_VOICEOS: { label: "Triggering VoiceOS", tone: "active", step: 3 },
-  VOICEOS_COMPLETE: { label: "VoiceOS complete", tone: "active", step: 3 },
-  SENDING_SMS: { label: "Sending SMS", tone: "active", step: 4 },
-  COMPLETE: { label: "Rescue complete", tone: "done", step: 5 },
-  INCOMPLETE: { label: "Rescue incomplete", tone: "failed", step: 2 },
+  WAITING_FOR_MANAGER_COMMAND: { label: "Waiting for manager command", tone: "idle" },
+  SHIFT_CREATED: { label: "Shift created", tone: "active" },
+  CALLING_WORKER: { label: "Calling worker", tone: "active" },
+  WORKER_DECLINED: { label: "Worker declined", tone: "active" },
+  WORKER_ACCEPTED: { label: "Worker accepted", tone: "active" },
+  TRIGGERING_VOICEOS: { label: "Triggering VoiceOS", tone: "active" },
+  VOICEOS_COMPLETE: { label: "VoiceOS complete", tone: "active" },
+  SENDING_SMS: { label: "Confirmation SMS not sent", tone: "failed" },
+  COMPLETE: { label: "Rescue complete", tone: "done" },
+  INCOMPLETE: { label: "Rescue incomplete", tone: "failed" },
 };
 
 export function statusMeta(status: string): StatusMeta {
-  return STATUS_META[status] ?? { label: status.replace(/_/g, " ").toLowerCase(), tone: "idle", step: 0 };
+  return STATUS_META[status] ?? { label: status.replace(/_/g, " ").toLowerCase(), tone: "idle" };
 }
 
 export function statusTagClass(status: string): string {
@@ -39,28 +37,57 @@ export function statusTagClass(status: string): string {
   return tone === "idle" ? "status-tag" : `status-tag status-tag-${tone}`;
 }
 
+export interface RailProof {
+  callId?: string;
+  calendarEventId?: string;
+  slackMessageId?: string;
+  gmailMessageId?: string;
+  spreadsheetId?: string;
+  spreadsheetUpdateRange?: string;
+  smsMessageId?: string;
+  voiceosFailed?: boolean;
+}
+
+/** Every id VoiceOS has to return before its step counts as done. */
+const VOICEOS_PROOF = [
+  "calendarEventId",
+  "slackMessageId",
+  "gmailMessageId",
+  "spreadsheetId",
+  "spreadsheetUpdateRange",
+] as const;
+
 /**
- * State of every step in the rail.
+ * State of every step in the rail, derived from what actually happened rather
+ * than from the status label.
  *
- * A step is only ever "done" when it actually happened. A failed run must not
- * render later steps as complete — the demo is scored on side effects that can
- * be independently confirmed, so claiming an un-run step is a fabricated success.
- *
- * `hasAcceptance` distinguishes the two ways a run can fail: every worker
- * declined (acceptance itself failed) versus VoiceOS failing after someone had
- * already accepted.
+ * A step is only ever "done" when the side effect that defines it produced
+ * proof. This is the rule the whole demo is scored on: claiming an un-run step
+ * is a fabricated success, so the VoiceOS step stays "not run" until all five
+ * of its ids exist, no matter how far the rest of the run has got.
  */
-export function railStates(status: string, hasAcceptance: boolean): StepState[] {
-  const { step, tone } = statusMeta(status);
+export function railStates(
+  status: string,
+  proof: RailProof,
+  hasAcceptance: boolean,
+): StepState[] {
+  const started = status !== "WAITING_FOR_MANAGER_COMMAND";
+  const calling = status === "CALLING_WORKER";
+  const dead = status === "INCOMPLETE";
 
-  if (tone === "failed") {
-    const failedIndex = hasAcceptance ? 3 : 2;
-    return WORKFLOW_STEPS.map((_, index) =>
-      index < failedIndex ? "done" : index === failedIndex ? "failed" : "pending",
-    );
-  }
+  const voiceosDone = VOICEOS_PROOF.every((key) => Boolean(proof[key]));
+  const called = Boolean(proof.callId) || hasAcceptance;
 
-  return WORKFLOW_STEPS.map((_, index) =>
-    index < step ? "done" : index === step ? "active" : "pending",
-  );
+  // The send happens inside the acceptance request, so the dashboard can only
+  // ever observe SENDING_SMS after it failed — there is no window to poll
+  // during. Treat it as the failure it is rather than a step still running.
+  const smsFailed = status === "SENDING_SMS";
+
+  return [
+    started ? "done" : "pending",
+    called ? "done" : calling ? "active" : dead ? "failed" : "pending",
+    hasAcceptance ? "done" : dead ? "failed" : calling ? "active" : "pending",
+    voiceosDone ? "done" : proof.voiceosFailed ? "failed" : hasAcceptance ? "active" : "pending",
+    proof.smsMessageId ? "done" : smsFailed ? "failed" : "pending",
+  ];
 }

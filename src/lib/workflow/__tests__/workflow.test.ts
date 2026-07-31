@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { getWorkflowState, resetWorkflowState } from "../state";
 import { resetEmployees } from "../../employees/store";
+import { getShift, resetShifts } from "../../shifts/store";
 import {
   handleVoiceosCommand,
   handleVapiResult,
@@ -30,6 +31,9 @@ describe("Workflow Orchestrator Engine", () => {
     process.env.DEMO_WORKER_3_PHONE = "+14155550103";
     process.env.SIMULATE = "true";
     await resetEmployees();
+    // A run is pinned to a real row in the schedule, so the schedule has to be
+    // back at its seeded state too or assignments leak between tests.
+    await resetShifts();
     await resetWorkflowState();
   });
 
@@ -80,7 +84,7 @@ describe("Workflow Orchestrator Engine", () => {
     expect(state.timeline.some((t) => t.message.includes("Calling Ahmed Khan in Urdu"))).toBe(true);
   });
 
-  it("should transition to TRIGGERING_VOICEOS when Worker 2 accepts", async () => {
+  it("should cover the shift and text the worker as soon as Worker 2 accepts", async () => {
     await handleVoiceosCommand({
       role: "Kitchen Assistant",
       date: "July 31",
@@ -92,9 +96,34 @@ describe("Workflow Orchestrator Engine", () => {
     await submitDecision("declined");
     const state = await submitDecision("accepted");
 
-    expect(state.status).toBe("TRIGGERING_VOICEOS");
+    // The schedule and the confirmation text are ours end to end, so neither
+    // waits on VoiceOS — which may not be listening at all.
+    expect(state.status).toBe("COMPLETE");
     expect(state.shift?.assignedWorkerId).toBe("emp_ahmed");
+    expect(state.proof.smsMessageId).toMatch(/^sim-sms-/);
     expect(state.timeline.some((t) => t.message.includes("Ahmed Khan accepted"))).toBe(true);
+    expect(state.timeline.some((t) => t.message.includes("Schedule updated"))).toBe(true);
+
+    // VoiceOS proof has not arrived, so none of it may be claimed.
+    expect(state.proof.calendarEventId).toBeUndefined();
+    expect(state.proof.slackMessageId).toBeUndefined();
+  });
+
+  it("should mark the scheduled shift covered when a worker accepts", async () => {
+    await handleVoiceosCommand({
+      role: "Kitchen Assistant",
+      date: "July 31",
+      startTime: "6:00 PM",
+      endTime: "10:00 PM",
+      location: "Downtown San Francisco",
+    });
+
+    const state = await submitDecision("accepted");
+
+    // The calendar is the visible payoff: the block has to stop reading
+    // "Unfilled" without anyone touching the schedule by hand.
+    const scheduled = await getShift(state.shift!.id);
+    expect(scheduled?.assignedEmployeeId).toBe("emp_maria");
   });
 
   it("should ignore late worker callbacks once someone has already accepted", async () => {
@@ -115,7 +144,8 @@ describe("Workflow Orchestrator Engine", () => {
       decision: "declined",
     });
 
-    expect(stateAfterLateCallback.status).toBe("TRIGGERING_VOICEOS");
+    expect(stateAfterLateCallback.status).toBe("COMPLETE");
+    expect(stateAfterLateCallback.shift?.assignedWorkerId).toBe("emp_ahmed");
   });
 
   it("should store proof IDs and mark COMPLETE upon VoiceOS success", async () => {
@@ -164,25 +194,45 @@ describe("Workflow Orchestrator Engine", () => {
       "scheduleUpdated must be true",
     );
 
-    // callId comes from placing the call and is real. What must not appear is
-    // any VoiceOS proof, since VoiceOS supplied none.
+    // callId comes from placing the call and is real, and the SMS was sent at
+    // acceptance. What must not appear is any VoiceOS proof, since VoiceOS
+    // supplied none.
     const { proof } = await getWorkflowState();
     expect(proof.scheduleUpdated).toBeUndefined();
     expect(proof.calendarEventId).toBeUndefined();
     expect(proof.slackMessageId).toBeUndefined();
     expect(proof.gmailMessageId).toBeUndefined();
     expect(proof.spreadsheetId).toBeUndefined();
-    expect(proof.smsMessageId).toBeUndefined();
   });
 
   it("should not claim the SMS was sent without a message ID", async () => {
     await handleVoiceosCommand(command);
-    await submitDecision("accepted");
+
+    // Break the SMS credentials before the acceptance, which is now what
+    // triggers the send.
+    process.env.SIMULATE = "false";
+    delete process.env.A1MOBILE_API_KEY;
+    delete process.env.A1MOBILE_TEAM_KEY;
+    delete process.env.A1_TEAM_KEY;
+
+    const state = await submitDecision("accepted");
+
+    // No a1mobile credentials here, so the send fails. The run must stop at
+    // SENDING_SMS rather than invent a message id it never received.
+    expect(state.status).toBe("SENDING_SMS");
+    expect(state.proof.smsMessageId).toBeUndefined();
+    expect(state.timeline.some((t) => t.message.includes("Rescue complete"))).toBe(false);
+    expect(state.timeline.at(-1)?.message).toContain("Confirmation SMS to Maria Alvarez failed");
+  });
+
+  it("should not let VoiceOS proof close a run whose SMS never sent", async () => {
+    await handleVoiceosCommand(command);
 
     process.env.SIMULATE = "false";
     delete process.env.A1MOBILE_API_KEY;
     delete process.env.A1MOBILE_TEAM_KEY;
     delete process.env.A1_TEAM_KEY;
+    await submitDecision("accepted");
 
     const state = await handleVoiceosResult({
       success: true,
@@ -194,21 +244,38 @@ describe("Workflow Orchestrator Engine", () => {
       spreadsheetUpdateRange: "'Shift Events'!A8:V8",
     });
 
-    // No a1mobile credentials here, so the send fails. The run must stop at
-    // SENDING_SMS rather than invent a message id it never received.
+    // VoiceOS proof is real and gets recorded, but it is not SMS proof.
+    expect(state.proof.calendarEventId).toBe("cal_1");
     expect(state.status).toBe("SENDING_SMS");
     expect(state.proof.smsMessageId).toBeUndefined();
-    expect(state.timeline.some((t) => t.message.includes("Rescue complete"))).toBe(false);
-    expect(state.timeline.at(-1)?.message).toContain("Confirmation SMS to Maria Alvarez failed");
   });
 
-  it("should send the confirmation SMS itself when VoiceOS supplies no id", async () => {
-    process.env.SIMULATE = "true";
-    try {
-      await handleVoiceosCommand(command);
-      await submitDecision("accepted");
+  it("should record VoiceOS proof on top of an already complete run", async () => {
+    await handleVoiceosCommand(command);
+    const accepted = await submitDecision("accepted");
+    expect(accepted.status).toBe("COMPLETE");
 
-      const state = await handleVoiceosResult({
+    const state = await handleVoiceosResult({
+      success: true,
+      scheduleUpdated: true,
+      calendarEventId: "cal_1",
+      slackMessageId: "slack_1",
+      gmailMessageId: "gmail_1",
+      spreadsheetId: "sheet_1",
+      spreadsheetUpdateRange: "'Shift Events'!A8:V8",
+    });
+
+    expect(state.status).toBe("COMPLETE");
+    expect(state.proof.spreadsheetUpdateRange).toBe("'Shift Events'!A8:V8");
+    // The worker is texted once, at acceptance — never again by a mirror.
+    expect(state.timeline.filter((t) => t.message.includes("Rescue complete"))).toHaveLength(1);
+  });
+
+  it("should refuse VoiceOS proof when no shift was ever accepted", async () => {
+    // Otherwise anyone could post ids onto an empty run and the dashboard would
+    // show Calendar and Slack proof for a shift nobody took.
+    await expect(
+      handleVoiceosResult({
         success: true,
         scheduleUpdated: true,
         calendarEventId: "cal_1",
@@ -216,14 +283,28 @@ describe("Workflow Orchestrator Engine", () => {
         gmailMessageId: "gmail_1",
         spreadsheetId: "sheet_1",
         spreadsheetUpdateRange: "'Shift Events'!A8:V8",
-      });
+      }),
+    ).rejects.toThrow("No accepted shift");
 
-      expect(state.status).toBe("COMPLETE");
-      expect(state.proof.smsMessageId).toMatch(/^sim-sms-/);
-      expect(state.timeline.at(-1)?.message).toContain("Rescue complete");
-    } finally {
-      delete process.env.SIMULATE;
-    }
+    const { proof } = await getWorkflowState();
+    expect(proof.calendarEventId).toBeUndefined();
+
+    // And not while a call is still in flight either.
+    await handleVoiceosCommand(command);
+    await expect(handleVoiceosResult({ success: true })).rejects.toThrow("No accepted shift");
+  });
+
+  it("should keep an acceptance that happened when VoiceOS reports failure", async () => {
+    await handleVoiceosCommand(command);
+    await submitDecision("accepted");
+
+    const state = await handleVoiceosResult({ success: false });
+
+    // The shift really is covered and the worker really was texted. Only the
+    // external mirrors failed, and that is what the rail must show.
+    expect(state.status).toBe("COMPLETE");
+    expect(state.proof.voiceosFailed).toBe(true);
+    expect(state.shift?.assignedWorkerId).toBe("emp_maria");
   });
 
   it("should text the worker who accepted, not whoever was mid-call", async () => {
@@ -340,7 +421,7 @@ describe("Workflow Orchestrator Engine", () => {
     expect((await getWorkflowState()).currentWorkerId).toBe("emp_ahmed");
 
     const state = await submitDecision("accepted");
-    expect(state.status).toBe("TRIGGERING_VOICEOS");
+    expect(state.status).toBe("COMPLETE");
     expect(state.shift?.assignedWorkerId).toBe("emp_ahmed");
   });
 
@@ -424,8 +505,6 @@ describe("Workflow Orchestrator Engine", () => {
   });
 
   it("should reject blank Calendar or Slack proof IDs", async () => {
-    // A rescue must have an accepted worker before completion is even
-    // considered, so get past that guard to reach the proof check.
     await handleVoiceosCommand(command);
     await submitDecision("accepted");
 
