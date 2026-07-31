@@ -43,6 +43,9 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
               <a className="nav-pill" href="/">
                 Schedule
               </a>
+              <a className="nav-pill" href="/logs">
+                Logs
+              </a>
               <a className="nav-pill" href="/team">
                 Team
               </a>
