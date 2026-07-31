@@ -42,6 +42,10 @@ export function buildAssistantConfig() {
     maxDurationSeconds: 300,
     endCallFunctionEnabled: true,
     server: { url: toolServerUrl() },
+    // "transcript" is not in Vapi's default serverMessages, so the live
+    // conversation never arrives unless it is asked for explicitly. Every
+    // server message goes to the one server.url above.
+    serverMessages: ["transcript", "tool-calls", "status-update", "end-of-call-report"],
   };
 }
 

@@ -2,10 +2,27 @@ import { NextResponse } from "next/server";
 import { handleVapiCallEnded, handleVapiResult } from "@/lib/workflow/actions";
 import { publicWorkflowState } from "@/lib/workflow/state";
 import { handleVapiWebhook, isVapiToolCallPayload } from "@/integrations/vapi";
+import { appendTranscriptLine } from "@/lib/workflow/transcript";
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
+    const message = body?.message;
+
+    // Vapi sends every server message to one URL, so the live transcript lands
+    // here alongside tool calls. Partials replace each other, so only final
+    // lines are kept (a missing transcriptType means final).
+    if (message?.type === "transcript") {
+      if ((message.transcriptType ?? "final") !== "final") {
+        return NextResponse.json({ success: true, ignored: "partial" });
+      }
+      await appendTranscriptLine({
+        speaker: message.role === "assistant" || message.role === "bot" ? "agent" : "worker",
+        text: message.transcript ?? "",
+        workerId: message.call?.assistantOverrides?.variableValues?.workerId,
+      });
+      return NextResponse.json({ success: true });
+    }
 
     // Vapi tool calls arrive as a { message: { toolCallList } } envelope and
     // expect a toolCallId-keyed reply so the assistant can close the call.
