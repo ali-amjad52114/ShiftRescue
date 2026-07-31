@@ -145,6 +145,7 @@ async function main() {
   check(
     "no-answer reasons are not treated as answered",
     classifyEndedReason("customer-did-not-answer", "ended") === "no-answer" &&
+      classifyEndedReason("customer-busy", "ended") === "no-answer" &&
       classifyEndedReason("voicemail", "ended") === "no-answer",
   );
   check(
@@ -152,9 +153,32 @@ async function main() {
     classifyEndedReason("customer-ended-call", "ended") === "answered",
   );
   check(
-    "transport and pipeline problems are failures",
+    "pipeline problems are failures",
     classifyEndedReason("pipeline-error-openai-llm-failed", "ended") === "failed" &&
-      classifyEndedReason("sip-gateway-failed-to-connect-call", "ended") === "failed",
+      classifyEndedReason("pipeline-error-429-exceeded-quota", "ended") === "failed",
+  );
+  // These read like failures but mean nobody was reached, so the workflow
+  // should move to the next worker rather than report a broken system.
+  check(
+    "never-connected reasons count as no-answer, not failure",
+    classifyEndedReason(
+      "call.in-progress.error-sip-outbound-call-failed-to-connect",
+      "ended",
+    ) === "no-answer" &&
+      classifyEndedReason("twilio-failed-to-connect-call", "ended") === "no-answer" &&
+      classifyEndedReason("vonage-rejected", "ended") === "no-answer",
+  );
+  // Contains "sip" but is a healthy completion.
+  check(
+    "sip-completed-call is answered, not failed",
+    classifyEndedReason("call.in-progress.sip-completed-call", "ended") === "answered",
+  );
+  check(
+    "genuine sip faults are still failures",
+    classifyEndedReason(
+      "call.in-progress.error-providerfault-outbound-sip-403-forbidden",
+      "ended",
+    ) === "failed",
   );
   check(
     "a live call is not classified as ended",

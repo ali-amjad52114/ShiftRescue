@@ -11,8 +11,15 @@ import type {
 const A1_BASE_URL = "https://hack.a1mobile.com";
 const VAPI_BASE_URL = "https://api.vapi.ai";
 
+// Accept every name the docs and .env.example have used. Picking one and being
+// "right" just means someone loses an hour to a silently empty header.
 function teamKey(): string {
-  return process.env.A1MOBILE_API_KEY || process.env.A1_TEAM_KEY || "";
+  return (
+    process.env.A1MOBILE_API_KEY ||
+    process.env.A1MOBILE_TEAM_KEY ||
+    process.env.A1_TEAM_KEY ||
+    ""
+  );
 }
 
 function originationMode(): OriginationMode {

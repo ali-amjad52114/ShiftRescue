@@ -121,6 +121,74 @@ voice agent has to move to Hindi, the texts follow with no code change.
 npx --yes tsx src/integrations/a1mobile/smoke.ts   # offline, no network
 ```
 
+## Wiring the decision tools (Person 2 + Person 3)
+
+The `attemptId` above only protects you if the assistant sends it back. Vapi has
+a documented feature for exactly this — see
+https://docs.vapi.ai/tools/static-variables-and-aliases
+
+A tool has **two** `parameters` fields. `function.parameters` is the JSON schema
+the model fills in; the **top-level `parameters` array** is set by us and is
+never shown to the model. Trusted values belong in the second one, so the LLM
+cannot invent or override them:
+
+```json
+{
+  "type": "function",
+  "function": {
+    "name": "decline_shift",
+    "parameters": {
+      "type": "object",
+      "properties": { "reason": { "type": "string" } }
+    }
+  },
+  "server": { "url": "https://YOUR-TUNNEL/api/vapi-result", "timeoutSeconds": 20 },
+  "parameters": [
+    { "key": "workerId",  "value": "{{ workerId }}" },
+    { "key": "attemptId", "value": "{{ attemptId }}" },
+    { "key": "decision",  "value": "declined" }
+  ]
+}
+```
+
+`{{ workerId }}` and `{{ attemptId }}` resolve from the `variableValues` we send
+at call creation. Vapi classifies those as server-trusted, and static values
+override any same-named key the model produces. The model only supplies `reason`.
+
+### Parsing the tool call — read this before writing the route
+
+**Vapi's own docs disagree about where tool arguments live.** `/tools/custom-tools`
+shows `toolCallList[].arguments`, `/server-url/events` shows
+`toolCallList[].parameters`, community code uses
+`toolCallList[].function.arguments`, and the OpenAPI schema leaves the item as an
+empty object. Do not pick one — read defensively:
+
+```ts
+const call = body.message.toolCallList[0];
+const toolCallId = call.id;
+const name = call.name ?? call.function?.name;
+let args = call.arguments ?? call.parameters
+        ?? call.function?.arguments ?? call.function?.parameters ?? {};
+if (typeof args === "string") args = JSON.parse(args);
+```
+
+Event type is at `body.message.type === "tool-calls"`; the call id is a sibling
+at `body.message.call.id`.
+
+### Responding
+
+```json
+{ "results": [{ "toolCallId": "<same id from the request>", "result": "Got it." }] }
+```
+
+Three rules that are easy to get wrong:
+- **`result` must be a string**, not an object. `JSON.stringify` anything else.
+- **Single line only** — line breaks cause parse errors.
+- **Always return HTTP 200, even on failure.** Any other status is ignored
+  entirely; signal problems with `"error": "..."` instead of `"result"`.
+
+Default server timeout is 20 seconds.
+
 ## Open items for the team
 
 1. **`docs/API-CONTRACTS.md` has no origination flag.** If the spike fails we

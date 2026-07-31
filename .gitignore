@@ -9,3 +9,8 @@ npm-debug.log*
 .aidesigner/*
 !.aidesigner/.gitkeep
 .env*
+
+# Local working notes. These contain demo phone numbers and live resource ids,
+# so keep the rule here rather than in .git/info/exclude, which is never cloned.
+ARCHITECTURE.md
+SWAYAM-WORK.md

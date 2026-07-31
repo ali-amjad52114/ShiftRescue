@@ -11,10 +11,18 @@
 // Only OTP-verified numbers may be called or texted.
 
 const BASE_URL = "https://hack.a1mobile.com";
-const teamKey = process.env.A1MOBILE_API_KEY || process.env.A1_TEAM_KEY;
+// Accept every name the docs and .env.example have used, so a mismatched
+// variable name fails loudly here instead of as an empty auth header.
+const teamKey =
+  process.env.A1MOBILE_API_KEY ||
+  process.env.A1MOBILE_TEAM_KEY ||
+  process.env.A1_TEAM_KEY;
 
 if (!teamKey) {
-  console.error("A1MOBILE_API_KEY is not set. Add it to .env, then re-run with --env-file=.env");
+  console.error(
+    "No a1mobile team key found. Set A1MOBILE_API_KEY in .env (not .env.local),",
+  );
+  console.error("then re-run with --env-file=.env");
   process.exit(1);
 }
 

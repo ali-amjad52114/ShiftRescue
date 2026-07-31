@@ -10,20 +10,41 @@ import type { CallOutcome, CallStatus } from "./types";
 const VAPI_BASE_URL = "https://api.vapi.ai";
 
 // Vapi reports why a call ended via `endedReason`. Group them by what the
-// workflow should do, not by what went wrong technically.
+// workflow should do, not by what went wrong technically. Values are from
+// https://docs.vapi.ai/calls/call-ended-reason
+//
+// Order matters. Several of these contain the words "failed" or "sip" while
+// meaning something quite different -- `sip-completed-call` is a healthy
+// completion, and `sip-outbound-call-failed-to-connect` means nobody was
+// reached rather than that our infrastructure is broken.
+
+// Never reached a human. Retryable, and not our fault.
 const NO_ANSWER = [
   "customer-did-not-answer",
   "customer-busy",
-  "voicemail",
   "no-answer",
+  "voicemail",
+  "twilio-failed-to-connect-call",
+  "vonage-failed-to-connect-call",
+  "vonage-rejected",
+  "sip-outbound-call-failed-to-connect",
+  "sip-480-temporarily-unavailable",
+  "sip-408-request-timeout",
+  "misdialed",
 ];
 
+// A human was on the line. Says nothing about whether they decided anything.
 const ANSWERED = [
   "customer-ended-call",
   "assistant-ended-call",
+  "assistant-said-end-call-phrase",
   "assistant-forwarded-call",
   "silence-timed-out",
   "exceeded-max-duration",
+  "assistant-did-not-receive-customer-audio",
+  "completed-call",
+  "vonage-completed",
+  "hangup",
 ];
 
 export function classifyEndedReason(
