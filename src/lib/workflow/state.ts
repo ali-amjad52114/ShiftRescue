@@ -9,8 +9,9 @@ const STATE_KEY = "shiftrescue:workflow";
  * employee phone numbers are stripped from every API response.
  */
 export function publicWorkflowState(state: WorkflowState) {
+  const { activeAttemptId: _activeAttemptId, ...publicState } = state;
   return {
-    ...state,
+    ...publicState,
     workers: state.workers.map(({ phone: _phone, ...worker }) => worker),
   };
 }
@@ -22,6 +23,7 @@ function createInitialState(workers: WorkflowState["workers"]): WorkflowState {
     workers,
     currentWorkerIndex: -1,
     currentWorkerId: null,
+    activeAttemptId: null,
     timeline: [],
     proof: {},
   };
@@ -46,7 +48,12 @@ async function hydrate(stored: WorkflowState | null): Promise<WorkflowState> {
     ? workers.findIndex((w) => w.id === stored.currentWorkerId)
     : stored.currentWorkerIndex;
 
-  return { ...stored, workers, currentWorkerIndex: index };
+  return {
+    ...stored,
+    workers,
+    currentWorkerIndex: index,
+    activeAttemptId: stored.activeAttemptId ?? null,
+  };
 }
 
 export async function getWorkflowState(): Promise<WorkflowState> {

@@ -26,6 +26,9 @@ interface StatusResponse {
     scheduleUpdated?: boolean;
     calendarEventId?: string;
     slackMessageId?: string;
+    gmailMessageId?: string;
+    spreadsheetId?: string;
+    spreadsheetUpdateRange?: string;
     smsMessageId?: string;
   };
   state?: {
@@ -43,13 +46,23 @@ const INITIAL: StatusResponse = {
   proof: {},
 };
 
-const SIDE_EFFECTS = ["scheduleUpdated", "calendarEventId", "slackMessageId", "smsMessageId"] as const;
+const SIDE_EFFECTS = [
+  "scheduleUpdated",
+  "calendarEventId",
+  "slackMessageId",
+  "gmailMessageId",
+  "spreadsheetId",
+  "spreadsheetUpdateRange",
+  "smsMessageId",
+] as const;
 
 export function DashboardView() {
   const [data, setData] = useState<StatusResponse>(INITIAL);
   const [connected, setConnected] = useState(false);
   const [confirmingReset, setConfirmingReset] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
 
   /**
    * Workflow state lives in memory, and Vercel serves requests from several
@@ -95,6 +108,35 @@ export function DashboardView() {
     }
   };
 
+  const handleStart = async () => {
+    setStarting(true);
+    setStartError(null);
+    try {
+      const res = await fetch("/api/voiceos-command", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          role: "Kitchen Assistant",
+          date: "July 31",
+          startTime: "6:00 PM",
+          endTime: "10:00 PM",
+          location: "Downtown San Francisco",
+          pay: "$24 per hour",
+        }),
+      });
+      const result = (await res.json()) as { success?: boolean; error?: string };
+      if (!res.ok || !result.success) {
+        throw new Error(result.error || `Start failed (${res.status})`);
+      }
+      seenEvents.current = -1;
+      await fetchStatus();
+    } catch (error) {
+      setStartError(error instanceof Error ? error.message : "Could not start the rescue");
+    } finally {
+      setStarting(false);
+    }
+  };
+
   useEffect(() => {
     fetchStatus();
     const interval = setInterval(fetchStatus, 1500);
@@ -129,7 +171,7 @@ export function DashboardView() {
           <h1 className="display">Coverage, closed on a call.</h1>
           <p className="lede">
             A manager speaks once. ShiftRescue calls workers in their own language, gets a real answer, then
-            updates the schedule, calendar and Slack — and shows the receipts.
+            updates the schedule, Calendar, Slack, Gmail and Sheets — and shows the receipts.
           </p>
           {/* Reset wipes a live demo run, so it is a two-step, non-primary action.
               The accent only appears on the confirm, where it is the intended action. */}
@@ -150,12 +192,20 @@ export function DashboardView() {
               </>
             ) : (
               <>
+                <button
+                  className="btn btn-primary"
+                  onClick={handleStart}
+                  disabled={starting || data.status !== "WAITING_FOR_MANAGER_COMMAND"}
+                >
+                  {starting ? "Starting…" : "Start rescue"}
+                </button>
                 <button className="btn btn-ghost" onClick={() => setConfirmingReset(true)}>
                   Reset demo
                 </button>
                 <a className="btn btn-ghost" href="/api/status">
                   Raw status JSON
                 </a>
+                {startError && <span className="hero-actions-note">{startError}</span>}
               </>
             )}
           </div>

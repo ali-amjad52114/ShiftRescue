@@ -8,28 +8,32 @@ import type { VapiToolDefinition } from "./types";
 export function toolServerUrl(): string {
   const base =
     process.env.VAPI_TOOL_SERVER_URL ||
+    process.env.PUBLIC_BASE_URL ||
     process.env.NEXT_PUBLIC_APP_URL ||
     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
   return `${base.replace(/\/$/, "")}/api/vapi-result`;
 }
 
-const workerIdParameter = {
+const noModelParameters = {
   type: "object" as const,
-  properties: {
-    workerId: {
-      type: "string",
-      description: "The worker ID supplied by the backend for this call, for example worker-2.",
-    },
-  },
-  required: ["workerId"],
+  properties: {},
+  required: [],
 };
+
+function trustedParameters(decision: string) {
+  return [
+    { key: "workerId", value: "{{ workerId }}" },
+    { key: "attemptId", value: "{{ attemptId }}" },
+    { key: "decision", value: decision },
+  ];
+}
 
 /**
  * The three decision tools. Each one produces exactly one structured result:
  * { workerId, decision }.
  */
 export function buildVapiTools(): VapiToolDefinition[] {
-  const server = { url: toolServerUrl() };
+  const server = { url: toolServerUrl(), timeoutSeconds: 20 };
 
   return [
     {
@@ -38,9 +42,10 @@ export function buildVapiTools(): VapiToolDefinition[] {
         name: "accept_shift",
         description:
           "Call when the worker has clearly agreed to take the shift. Use only after an explicit yes.",
-        parameters: workerIdParameter,
+        parameters: noModelParameters,
       },
       server,
+      parameters: trustedParameters("accepted"),
       messages: [
         { type: "request-start", content: "" },
         { type: "request-failed", content: "" },
@@ -52,9 +57,10 @@ export function buildVapiTools(): VapiToolDefinition[] {
         name: "decline_shift",
         description:
           "Call when the worker has clearly refused the shift. Use only after an explicit no.",
-        parameters: workerIdParameter,
+        parameters: noModelParameters,
       },
       server,
+      parameters: trustedParameters("declined"),
       messages: [
         { type: "request-start", content: "" },
         { type: "request-failed", content: "" },
@@ -69,16 +75,16 @@ export function buildVapiTools(): VapiToolDefinition[] {
         parameters: {
           type: "object" as const,
           properties: {
-            ...workerIdParameter.properties,
             reason: {
               type: "string",
               description: "Short reason, for example: audio unclear, worker undecided.",
             },
           },
-          required: ["workerId"],
+          required: [],
         },
       },
       server,
+      parameters: trustedParameters("needs_clarification"),
       messages: [
         { type: "request-start", content: "" },
         { type: "request-failed", content: "" },

@@ -1,5 +1,8 @@
-import { sendShiftConfirmationSms } from "../../integrations/a1mobile/client";
-import { startVapiShiftCall } from "../../integrations/vapi";
+import {
+  sendShiftConfirmationSms,
+  startA1MobileCall,
+} from "../../integrations/a1mobile/client";
+import { waitForCallOutcome } from "../../integrations/a1mobile/status";
 import {
   DEFAULT_TIME_ZONE,
   formatSpokenDate,
@@ -27,6 +30,7 @@ function advanceToNextWorker(state: WorkflowState): boolean {
   if (nextIndex >= state.workers.length) {
     state.status = "INCOMPLETE";
     state.currentWorkerId = null;
+    state.activeAttemptId = null;
     addTimelineEntry(state, "All workers declined. Shift rescue incomplete.");
     return false;
   }
@@ -34,6 +38,7 @@ function advanceToNextWorker(state: WorkflowState): boolean {
   const nextWorker = state.workers[nextIndex];
   state.currentWorkerIndex = nextIndex;
   state.currentWorkerId = nextWorker.id;
+  state.activeAttemptId = null;
   state.status = "CALLING_WORKER";
   addTimelineEntry(state, `Calling ${nextWorker.name} in ${nextWorker.language}`);
   return true;
@@ -50,22 +55,86 @@ async function dialCurrentWorker(state: WorkflowState): Promise<void> {
     const worker = state.workers[state.currentWorkerIndex];
     if (!worker) return;
 
-    const result = await startVapiShiftCall({
+    const { role, location, pay, date, startTime, endTime } = state.shift;
+    const result = await startA1MobileCall({
       workerId: worker.id,
       workerName: worker.name,
       phone: worker.phone,
       language: worker.language,
-      shift: state.shift,
+      shiftId: state.shift.id,
+      shift: {
+        role,
+        location,
+        pay,
+        date: date ?? "",
+        startTime: startTime ?? "",
+        endTime: endTime ?? "",
+      },
     });
 
-    if (result.success) {
+    if (result.success && result.callId && result.attemptId) {
       state.proof = { ...state.proof, callId: result.callId };
+      state.activeAttemptId = result.attemptId;
+      // Persist before starting the monitor: a call can fail immediately, and
+      // the monitor must not read the pre-call state and exit permanently.
+      await updateWorkflowState(state);
+      monitorCallAttempt(result.callId, result.attemptId, worker.id);
       return;
     }
 
-    addTimelineEntry(state, `Could not reach ${worker.name}: ${result.error}`);
+    addTimelineEntry(
+      state,
+      `Could not reach ${worker.name}: ${result.error || "call provider returned no proof"}`,
+    );
     if (!advanceToNextWorker(state)) return;
   }
+}
+
+/**
+ * A call can end without invoking a decision tool. Monitor the real Vapi call
+ * in the long-lived local demo process and advance only if this exact attempt
+ * is still active after the call has ended.
+ */
+function monitorCallAttempt(callId: string, attemptId: string, workerId: string): void {
+  if (callId.startsWith("sim-") || callId.startsWith("mock-")) return;
+
+  void (async () => {
+    const outcome = await waitForCallOutcome(callId);
+    if (outcome.outcome === "in-progress") return;
+
+    // Give a tool webhook that fired at hangup a short chance to win the race.
+    if (outcome.outcome === "answered") {
+      await new Promise((resolve) => setTimeout(resolve, 2_000));
+    }
+
+    const current = await getWorkflowState();
+    if (
+      current.status !== "CALLING_WORKER" ||
+      current.currentWorkerId !== workerId ||
+      current.activeAttemptId !== attemptId
+    ) {
+      return;
+    }
+
+    const worker = current.workers[current.currentWorkerIndex];
+    const name = worker?.name ?? workerId;
+    if (outcome.outcome === "no-answer") {
+      addTimelineEntry(current, `${name} did not answer; trying the next worker`);
+    } else if (outcome.outcome === "answered") {
+      addTimelineEntry(current, `Call with ${name} ended without a clear decision; trying the next worker`);
+    } else {
+      addTimelineEntry(
+        current,
+        `Call with ${name} could not complete${outcome.endedReason ? ` (${outcome.endedReason})` : ""}; trying the next worker`,
+      );
+    }
+
+    current.activeAttemptId = null;
+    if (advanceToNextWorker(current)) {
+      await dialCurrentWorker(current);
+    }
+    await updateWorkflowState(current);
+  })();
 }
 
 /**
@@ -158,6 +227,7 @@ export async function handleVoiceosCommand(payload: {
   state.status = "SHIFT_CREATED";
   state.timeline = [];
   state.proof = {};
+  state.activeAttemptId = null;
 
   addTimelineEntry(state, `Manager command received: Uncovered ${shift.role} shift created`);
 
@@ -176,6 +246,7 @@ export async function handleVoiceosCommand(payload: {
 
 export async function handleVapiResult(payload: {
   workerId: string;
+  attemptId: string;
   decision: WorkerDecision;
 }) {
   const state = await getWorkflowState();
@@ -186,16 +257,21 @@ export async function handleVapiResult(payload: {
   }
 
   const workerIndex = state.workers.findIndex((w) => w.id === payload.workerId);
-  const worker = workerIndex >= 0 ? state.workers[workerIndex] : state.workers[state.currentWorkerIndex];
+  const worker = workerIndex >= 0 ? state.workers[workerIndex] : undefined;
   const workerName = worker ? worker.name : payload.workerId;
 
-  // A duplicate or retried webhook from an earlier worker would otherwise
-  // advance the queue a second time and skip a worker who was never called.
-  if (payload.decision === "declined" && workerIndex >= 0 && workerIndex !== state.currentWorkerIndex) {
-    return state;
+  // Both values are server-trusted Vapi tool parameters. Reject missing,
+  // spoofed, duplicate, and late callbacks before they can mutate the queue.
+  if (
+    state.status !== "CALLING_WORKER" ||
+    payload.workerId !== state.currentWorkerId ||
+    payload.attemptId !== state.activeAttemptId
+  ) {
+    throw new Error("Decision does not match the active call attempt");
   }
 
   if (payload.decision === "declined") {
+    state.activeAttemptId = null;
     state.status = "WORKER_DECLINED";
     addTimelineEntry(state, `${workerName} declined shift`);
 
@@ -203,6 +279,7 @@ export async function handleVapiResult(payload: {
       await dialCurrentWorker(state);
     }
   } else if (payload.decision === "accepted") {
+    state.activeAttemptId = null;
     state.status = "WORKER_ACCEPTED";
     if (state.shift) {
       state.shift.assignedWorkerId = payload.workerId;
@@ -219,7 +296,11 @@ export async function handleVapiResult(payload: {
     state.status = "TRIGGERING_VOICEOS";
     addTimelineEntry(state, `Triggering VoiceOS to update Schedule, Calendar, Slack, Gmail, and Google Sheets`);
   } else if (payload.decision === "needs_clarification") {
-    addTimelineEntry(state, `Call with ${workerName} required clarification`);
+    state.activeAttemptId = null;
+    addTimelineEntry(state, `${workerName} could not confirm availability; trying the next worker`);
+    if (advanceToNextWorker(state)) {
+      await dialCurrentWorker(state);
+    }
   }
 
   return updateWorkflowState(state);
@@ -233,7 +314,6 @@ export async function handleVoiceosResult(payload: {
   gmailMessageId?: string;
   spreadsheetId?: string;
   spreadsheetUpdateRange?: string;
-  smsMessageId?: string;
 }) {
   const state = await getWorkflowState();
 
@@ -267,18 +347,11 @@ export async function handleVoiceosResult(payload: {
     state.status = "VOICEOS_COMPLETE";
     addTimelineEntry(state, "VoiceOS updated the schedule app, Google Calendar, Slack, Gmail, and Google Sheets");
 
-    const smsMessageId = payload.smsMessageId?.trim();
-    if (smsMessageId) {
-      state.proof.smsMessageId = smsMessageId;
-      state.status = "COMPLETE";
-      addTimelineEntry(state, "Confirmation SMS sent via a1mobile. Rescue complete!");
-    } else {
-      // VoiceOS did not send the text, so the backend does it now. This is the
-      // last step of the rescue and was the one thing nothing had ever run.
-      state.status = "SENDING_SMS";
-      addTimelineEntry(state, "Requesting a1mobile to send the confirmation SMS");
-      await sendConfirmationSms(state);
-    }
+    // VoiceOS never supplies SMS proof. The backend always performs the
+    // a1mobile side effect itself and stores only the returned message ID.
+    state.status = "SENDING_SMS";
+    addTimelineEntry(state, "Requesting a1mobile to send the confirmation SMS");
+    await sendConfirmationSms(state);
   } else {
     state.status = "INCOMPLETE";
     addTimelineEntry(state, "VoiceOS failed to update backend systems");

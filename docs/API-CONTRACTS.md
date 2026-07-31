@@ -1,6 +1,7 @@
 # API Contracts
 
-All route implementations are placeholders. Responses containing `mock` are not sponsor proof.
+The workflow uses real a1mobile call/SMS proof when `SIMULATE=false`.
+Responses containing `mock` or `sim-` are development-only and are not sponsor proof.
 
 ## Manager command
 
@@ -23,12 +24,16 @@ All route implementations are placeholders. Responses containing `mock` are not 
 
 ```json
 {
-  "workerId": "worker-1",
+  "workerId": "emp_maria",
+  "attemptId": "att_emp_maria_...",
   "decision": "declined"
 }
 ```
 
 Allowed decisions are `accepted`, `declined`, and `needs_clarification`.
+`workerId` and `attemptId` are injected as server-trusted Vapi tool parameters;
+the model cannot choose them. Vapi's `tool-calls` envelope is accepted at the
+same endpoint.
 
 ## VoiceOS result
 
@@ -38,16 +43,24 @@ Allowed decisions are `accepted`, `declined`, and `needs_clarification`.
 {
   "success": true,
   "scheduleUpdated": true,
-  "calendarEventId": "calendar_123",
-  "slackMessageId": "slack_123"
+  "calendarEventId": "calendar_real_id",
+  "slackMessageId": "slack_real_id",
+  "gmailMessageId": "gmail_real_id",
+  "spreadsheetId": "sheet_real_id",
+  "spreadsheetUpdateRange": "'Shift Events'!A8:V8"
 }
 ```
+
+The backend, not VoiceOS, sends the final a1mobile confirmation SMS and stores
+the message ID returned by a1mobile.
 
 ## Current status
 
 `GET /api/status`
 
-Returns the current in-memory workflow state.
+Returns the current workflow state with employee phone numbers and the active
+attempt ID removed. State uses Upstash Redis when configured and otherwise
+falls back to the local process.
 
 ## Reset demo
 

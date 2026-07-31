@@ -66,6 +66,8 @@ export interface WorkflowState {
   workers: Worker[];
   currentWorkerIndex: number;
   currentWorkerId: string | null;
+  /** Only a decision from this server-generated call attempt may mutate the run. */
+  activeAttemptId: string | null;
   timeline: TimelineEvent[];
   proof: WorkflowProof;
 }

@@ -1,5 +1,7 @@
 import { callbackInviteSms, shiftConfirmationSms } from "./messages";
 import type { ShiftDetails } from "./messages";
+import { buildAssistantOverrides } from "../vapi/assistant";
+import { resolveLanguage } from "../vapi/prompt";
 import type {
   A1MobileCallResult,
   A1MobileClaimedNumber,
@@ -180,24 +182,21 @@ async function dialViaVapi(input: {
         assistantId,
         phoneNumberId,
         customer: { number: input.phone },
-        // Everything the prompt needs, so shift details live in one place
-        // instead of being hardcoded into the assistant. Piotre templates
-        // these as {{workerName}}, {{role}}, {{pay}} and so on.
-        assistantOverrides: {
-          variableValues: {
-            workerId: input.workerId,
-            shiftId: input.shiftId,
-            attemptId: input.attemptId,
-            language: input.language,
-            workerName: input.workerName ?? "",
-            role: input.shift?.role ?? "",
-            date: input.shift?.date ?? "",
-            startTime: input.shift?.startTime ?? "",
-            endTime: input.shift?.endTime ?? "",
-            location: input.shift?.location ?? "",
-            pay: input.shift?.pay ?? "",
-          },
-        },
+        // Keep a1mobile as the transport boundary while applying Piotre's
+        // per-call prompt and server-trusted decision tools on every dial.
+        assistantOverrides: buildAssistantOverrides({
+          workerId: input.workerId,
+          shiftId: input.shiftId,
+          attemptId: input.attemptId,
+          language: resolveLanguage(input.language),
+          workerName: input.workerName ?? "",
+          role: input.shift?.role ?? "",
+          date: input.shift?.date ?? "",
+          startTime: input.shift?.startTime ?? "",
+          endTime: input.shift?.endTime ?? "",
+          location: input.shift?.location ?? "",
+          pay: input.shift?.pay ?? "",
+        }),
       }),
     });
 
