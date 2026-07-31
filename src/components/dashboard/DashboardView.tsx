@@ -105,7 +105,7 @@ export function DashboardView() {
           </div>
         </div>
 
-        <aside className="stat-card">
+        <aside className="stat-card" aria-label="Current workflow status">
           <div className="card-head">
             <p className="eyebrow eyebrow-inverse">Current status</p>
             <span className="live-pill">
@@ -113,7 +113,10 @@ export function DashboardView() {
               {connected ? "Live" : "Offline"}
             </span>
           </div>
-          <p className="stat-value">{meta.label}</p>
+          {/* Polled every 1.5s — announce changes rather than silently swapping text. */}
+          <p className="stat-value" aria-live="polite">
+            {meta.label}
+          </p>
           <dl className="mini-list">
             <div className="mini-row">
               <dt className="mini-label">Workers called</dt>

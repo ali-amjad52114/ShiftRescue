@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "aidesigner": {
+      "type": "http",
+      "url": "https://api.aidesigner.ai/api/v1/mcp"
+    },
+    "stitch": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@_davideast/stitch-mcp", "proxy", "--transport", "stdio"]
+    }
+  }
+}

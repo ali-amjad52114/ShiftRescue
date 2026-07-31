@@ -169,10 +169,21 @@ body {
 .page {
   max-width: var(--page-max-width);
   margin: 0 auto;
-  padding: var(--spacing-56) var(--spacing-24) var(--spacing-88);
+  padding: var(--spacing-40) var(--spacing-24) var(--spacing-88);
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-56);
+  gap: var(--spacing-40);
+}
+
+/* Focus states — the accent is reserved for actions, so focus uses the ink
+   hairline on light surfaces and chartreuse on the forest card. */
+:focus-visible {
+  outline: 2px solid var(--color-ink-black);
+  outline-offset: 2px;
+}
+
+.stat-card :focus-visible {
+  outline-color: var(--color-chartreuse-lime);
 }
 
 /* --------------------------------------------------------------- Type bits */
@@ -192,12 +203,15 @@ body {
   color: var(--color-chartreuse-lime);
 }
 
+/* Capped at 72px rather than the 96px display size: this is a live-ops dashboard,
+   and 96px pushed the workflow itself below the fold. 72px is still in the
+   Grenette scale. Tracking is em-based so it stays correct as the clamp scales. */
 .display {
   font-family: var(--font-grenette);
   font-weight: var(--font-weight-regular);
-  font-size: clamp(48px, 8vw, var(--text-display));
+  font-size: clamp(40px, 6vw, 72px);
   line-height: var(--leading-display);
-  letter-spacing: var(--tracking-display);
+  letter-spacing: -0.031em;
   color: var(--color-deep-forest);
   margin: 0;
 }

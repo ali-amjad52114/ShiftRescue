@@ -6,3 +6,5 @@ npm-debug.log*
 *.tsbuildinfo
 .vercel
 .env*.local
+.aidesigner/*
+!.aidesigner/.gitkeep
