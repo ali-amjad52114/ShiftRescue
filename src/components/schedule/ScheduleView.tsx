@@ -388,6 +388,8 @@ export function ScheduleView() {
           same sentence is not repeated in two places. */}
       {rescue.active && rescue.timeline.length > 0 && (
         <section className="live" aria-label="Live call">
+          {/* The chips are a running summary, not a feed, so they sit on the
+              header line rather than stacked above the activity list. */}
           <div className="live-head">
             <span className="live-shift">
               {(() => {
@@ -396,6 +398,7 @@ export function ScheduleView() {
                 return `Covering ${target.role} · ${new Intl.DateTimeFormat("en-GB", { timeZone, weekday: "short", day: "numeric", month: "short" }).format(new Date(target.startsAt))} ${formatRange(target.startsAt, target.endsAt, timeZone)}`;
               })()}
             </span>
+            <CompletedChips completed={rescue.completed} tone="dark" />
           </div>
 
           <div className="live-columns">
@@ -416,8 +419,6 @@ export function ScheduleView() {
             </div>
 
             <div className="live-column live-column-narrow">
-              <p className="live-column-label">Updated</p>
-              <CompletedChips completed={rescue.completed} tone="dark" />
               <p className="live-column-label">Activity</p>
               <ul className="live-feed">
                 {rescue.timeline.slice(-6).map((entry, index, all) => (
