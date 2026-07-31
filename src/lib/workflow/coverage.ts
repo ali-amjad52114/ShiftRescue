@@ -82,8 +82,9 @@ export async function startCoverage(
     event(`Calling ${first.name} in ${first.language}`),
   ];
 
-  // Actually ring them. The route passes after(), so the button returns as soon
-  // as the run is recorded rather than waiting on the Vapi dial.
+  // Actually ring them. dialActiveWorker persists the run before dialling and
+  // refuses to dial twice, and the route passes after(), so the button returns
+  // as soon as the run is recorded rather than waiting on the Vapi round trip.
   return dialActiveWorker(next, options);
 }
 

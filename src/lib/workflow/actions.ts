@@ -53,7 +53,7 @@ function advanceToNextWorker(state: WorkflowState): boolean {
  * Vapi answers as soon as the call is queued, so this returns while the
  * conversation is still live; the decision arrives later via the webhook.
  */
-async function dialCurrentWorker(state: WorkflowState): Promise<void> {
+export async function dialCurrentWorker(state: WorkflowState): Promise<void> {
   while (state.shift && state.status === "CALLING_WORKER") {
     const worker = state.workers[state.currentWorkerIndex];
     if (!worker) return;
@@ -457,6 +457,14 @@ export async function handleVoiceosResult(payload: {
   const state = await getWorkflowState();
 
   if (payload.success) {
+    // Completion means "this shift is now covered". Without an acceptance
+    // there is nobody to cover it, and recording proof would claim the
+    // schedule, Calendar, Slack, Gmail and Sheets were updated for an empty
+    // shift — a fabricated success.
+    if (!state.shift?.assignedWorkerId) {
+      throw new Error("Cannot complete a rescue before a worker has accepted the shift");
+    }
+
     // A successful result must include proof from every VoiceOS side effect.
     // Never fall back to invented IDs or silently accept partial completion.
     if (!payload.scheduleUpdated) {

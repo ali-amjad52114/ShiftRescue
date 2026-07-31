@@ -38,6 +38,14 @@ interface Rescue {
   timeline: Array<{ id: string; message: string; timestamp: string }>;
   transcript: Array<{ id: string; speaker: "agent" | "worker"; text: string; timestamp: string }>;
   confirmedBySms: boolean;
+  completed?: {
+    schedule: boolean;
+    calendar: boolean;
+    slack: boolean;
+    email: boolean;
+    sheet: boolean;
+    sms: boolean;
+  };
 }
 
 interface Schedule {
@@ -267,6 +275,11 @@ export function ScheduleView() {
               ))}
             </select>
           </label>
+          {!data.canManage && (
+            <a className="btn btn-primary btn-sm" href="/login">
+              Sign in to manage
+            </a>
+          )}
           <button className="btn btn-ghost btn-sm" onClick={() => setWeekOffset((w) => w - 1)} aria-label="Previous week">
             ‹
           </button>
@@ -300,31 +313,63 @@ export function ScheduleView() {
         </div>
       </header>
 
-      <section className="coverage-strip" aria-label="Coverage summary">
-        <div className="coverage-stat">
-          <span className="coverage-value">{visibleShifts.length}</span>
-          <span className="coverage-label">shifts</span>
+      <section className="summary" aria-label="Coverage summary">
+        <div className="summary-counts">
+          <span className="summary-count">
+            <strong>{visibleShifts.length}</strong> shifts
+          </span>
+          <span className="summary-count">
+            <strong>{covered}</strong> covered
+          </span>
+          {filling > 0 && (
+            <span className="summary-count summary-count-filling">
+              <strong>{filling}</strong> finding cover
+            </span>
+          )}
+          <span className={`summary-count${unfilled > 0 ? " summary-count-open" : ""}`}>
+            <strong>{unfilled}</strong> unfilled
+          </span>
+          <span className="summary-zone">
+            {formatZoneAbbreviation(new Date().toISOString(), timeZone)}
+          </span>
         </div>
-        <div className="coverage-stat">
-          <span className="coverage-value">{covered}</span>
-          <span className="coverage-label">covered</span>
-        </div>
-        {filling > 0 && (
-          <div className="coverage-stat coverage-stat-filling">
-            <span className="coverage-value">{filling}</span>
-            <span className="coverage-label">finding cover</span>
-          </div>
+
+        {problemSlots.length > 0 && (
+          <ul className="summary-gaps">
+            {problemSlots.map((shift) => (
+              <li key={shift.id} className="summary-gap">
+                {/* No "Unfilled" chip here either: the row sits under a count
+                    that already says how many are unfilled, and carries a Find
+                    coverage button. */}
+                <button className="summary-gap-slot" onClick={() => setSelectedId(shift.id)}>
+                  <span className="summary-gap-marker" aria-hidden="true" />
+                  <span className="visually-hidden">Unfilled shift:</span>
+                  <span className="summary-gap-when">
+                    {new Intl.DateTimeFormat("en-GB", { timeZone, weekday: "short", day: "numeric", month: "short" }).format(new Date(shift.startsAt))}
+                    {" · "}
+                    {formatRange(shift.startsAt, shift.endsAt, timeZone)}
+                  </span>
+                  <span className="summary-gap-role">{shift.role}</span>
+                </button>
+                {data.canManage && (
+                  <button
+                    className="btn btn-primary btn-sm"
+                    disabled={busyId === shift.id || rescue.active}
+                    onClick={() => findCoverage(shift.id)}
+                  >
+                    {busyId === shift.id ? "Starting…" : rescue.active ? "Busy" : "Find coverage"}
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
         )}
-        <div className={`coverage-stat${unfilled > 0 ? " coverage-stat-open" : ""}`}>
-          <span className="coverage-value">{unfilled}</span>
-          <span className="coverage-label">unfilled</span>
-        </div>
-        <p className="coverage-zone">All times {formatZoneAbbreviation(new Date().toISOString(), timeZone)}</p>
       </section>
 
       {error && <p className="notice">{error}</p>}
 
       {editorFor !== undefined && (
+        <div className="shift-form-anchor">
         <ShiftForm
           shift={editorFor}
           people={data.people}
@@ -335,26 +380,26 @@ export function ScheduleView() {
           }}
           onCancel={() => setEditorFor(undefined)}
         />
+        </div>
       )}
 
+      {/* Who is being called, and how far the run has got, is the dock's job at
+          the bottom of the screen. This panel is only the call itself, so the
+          same sentence is not repeated in two places. */}
       {rescue.active && rescue.timeline.length > 0 && (
-        <section className="live-timeline" aria-label="Active rescue progress">
-          <div className="live-timeline-head">
-            <div className="live-pill">
-              <span className="live-dot" />
-              <span>Rescue in progress</span>
-            </div>
-            <span className="live-status">{rescue.status.replace(/_/g, " ")}</span>
+        <section className="live" aria-label="Live call">
+          {/* The chips are a running summary, not a feed, so they sit on the
+              header line rather than stacked above the activity list. */}
+          <div className="live-head">
+            <span className="live-shift">
+              {(() => {
+                const target = data.shifts.find((s) => s.id === rescue.shiftId);
+                if (!target) return "Finding cover";
+                return `Covering ${target.role} · ${new Intl.DateTimeFormat("en-GB", { timeZone, weekday: "short", day: "numeric", month: "short" }).format(new Date(target.startsAt))} ${formatRange(target.startsAt, target.endsAt, timeZone)}`;
+              })()}
+            </span>
+            <CompletedChips completed={rescue.completed} tone="dark" />
           </div>
-
-          <p className="live-headline">
-            {rescue.callingName
-              ? `Calling ${rescue.callingName}`
-              : rescue.confirmedBySms
-                ? "Cover confirmed"
-                : "Working through the team"}
-            {rescue.callingLanguage && <span className="live-language"> speaking {rescue.callingLanguage}</span>}
-          </p>
 
           <div className="live-columns">
             <div className="live-column">
@@ -388,41 +433,22 @@ export function ScheduleView() {
         </section>
       )}
 
-      {problemSlots.length > 0 && (
-        <section className="attention" aria-label="Shifts needing cover">
-          <div className="attention-head">
-            <h2 className="attention-title">
-              {problemSlots.length === 1
-                ? "1 shift has nobody on it"
-                : `${problemSlots.length} shifts have nobody on them`}
-            </h2>
-            <p className="attention-note">
-              Nothing is dialled until you start it here, or a manager asks by voice.
-            </p>
-          </div>
-          <ul className="attention-list">
-            {problemSlots.map((shift) => (
-              <li key={shift.id} className="attention-row">
-                <button className="attention-slot" onClick={() => setSelectedId(shift.id)}>
-                  <span className="attention-when">
-                    {new Intl.DateTimeFormat("en-GB", { timeZone, weekday: "short", day: "numeric", month: "short" }).format(new Date(shift.startsAt))}
-                    {" · "}
-                    {formatRange(shift.startsAt, shift.endsAt, timeZone)}
-                  </span>
-                  <span className="attention-role">{shift.role}</span>
-                </button>
-                {data.canManage && (
-                  <button
-                    className="btn btn-primary btn-sm"
-                    disabled={busyId === shift.id || rescue.active}
-                    onClick={() => findCoverage(shift.id)}
-                  >
-                    {busyId === shift.id ? "Starting…" : rescue.active ? "Busy" : "Find coverage"}
-                  </button>
-                )}
-              </li>
-            ))}
-          </ul>
+      {visibleShifts.length === 0 && (
+        <section className="calendar-empty-state">
+          <p className="section-lede">
+            {roleFilter === "all"
+              ? "Nothing is scheduled for this week yet."
+              : `No ${roleFilter} shifts are scheduled for this week.`}
+          </p>
+          {data.canManage ? (
+            <button className="btn btn-primary" onClick={() => setEditorFor(null)}>
+              Add the first shift
+            </button>
+          ) : (
+            <a className="btn btn-ghost" href="/login">
+              Sign in to add shifts
+            </a>
+          )}
         </section>
       )}
 
@@ -456,11 +482,12 @@ export function ScheduleView() {
                     const top = Math.max(0, (dayFraction(shift.startsAt, timeZone) - DAY_START / 24) / BAND);
                     const bottom = Math.min(1, (dayFraction(shift.endsAt, timeZone) - DAY_START / 24) / BAND);
                     const state = person ? "covered" : isFilling ? "filling" : "open";
+                    const roleClass = getRoleClass(shift.role);
 
                     return (
                       <button
                         key={shift.id}
-                        className={`shift-block shift-block-${state}${selectedId === shift.id ? " shift-block-selected" : ""}`}
+                        className={`shift-block shift-block-${state} shift-block-role-${roleClass}${selectedId === shift.id ? " shift-block-selected" : ""}`}
                         style={(() => {
                           const width = Math.max(1 / lanes, 0.62);
                           const step = lanes > 1 ? (1 - width) / (lanes - 1) : 0;
@@ -470,19 +497,28 @@ export function ScheduleView() {
                             left: `calc(${lane * step * 100}% + 2px)`,
                             width: `calc(${width * 100}% - 4px)`,
                             right: "auto",
-                            zIndex: lane + 1,
+                            // A shift with nobody on it must never be hidden
+                            // behind a covered one that happens to cascade over
+                            // it — it is the whole point of the screen.
+                            zIndex: state === "open" ? 30 : state === "filling" ? 20 : lane + 1,
                           };
                         })()}
                         onClick={() => setSelectedId(shift.id === selectedId ? null : shift.id)}
                       >
                         <span className="shift-block-time">{formatTime(shift.startsAt, timeZone)}</span>
                         <span className="shift-block-role">{shift.role}</span>
+                        {/* An unfilled block is solid ink among pale ones and is
+                            listed at the top of the page, so the word would be a
+                            third telling. It stays for screen readers, which get
+                            nothing from the colour. */}
                         <span className="shift-block-person">
-                          {person
-                            ? person.name
-                            : isFilling
-                              ? `Calling ${(rescue.callingName ?? "").split(" ")[0] || "…"}`
-                              : "Unfilled"}
+                          {person ? (
+                            person.name
+                          ) : isFilling ? (
+                            `Calling ${(rescue.callingName ?? "").split(" ")[0] || "…"}`
+                          ) : (
+                            <span className="visually-hidden">Unfilled</span>
+                          )}
                         </span>
                       </button>
                     );
@@ -508,7 +544,10 @@ export function ScheduleView() {
           onAssign={(empId) => assignShift(selected.id, empId)}
           onFindCoverage={() => findCoverage(selected.id)}
           onUnfulfillAndRescue={(shiftId) => markUnfulfilledAndRescue(shiftId)}
-          onEdit={() =>
+          onEdit={() => {
+            requestAnimationFrame(() =>
+              document.querySelector(".shift-form-anchor")?.scrollIntoView({ behavior: "smooth", block: "center" }),
+            );
             setEditorFor({
               id: selected.id,
               role: selected.role,
@@ -516,12 +555,41 @@ export function ScheduleView() {
               endsAt: selected.endsAt,
               pay: selected.pay,
               assignedEmployeeId: selected.assignedEmployeeId,
-            })
-          }
+            });
+          }}
           onClose={() => setSelectedId(null)}
         />
       )}
     </main>
+  );
+}
+
+/** The connected apps the rescue updates, in the order they happen. */
+const SIDE_EFFECTS = [
+  { key: "schedule", label: "Schedule" },
+  { key: "calendar", label: "Calendar" },
+  { key: "slack", label: "Slack" },
+  { key: "email", label: "Email" },
+  { key: "sheet", label: "Sheet" },
+  { key: "sms", label: "Text" },
+] as const;
+
+/** Chips for each app, shown only once that app has actually confirmed. */
+function CompletedChips({ completed, tone }: { completed: Rescue["completed"]; tone: "dark" | "light" }) {
+  if (!completed) return null;
+  const done = SIDE_EFFECTS.filter((e) => completed[e.key]);
+  if (done.length === 0) return null;
+  return (
+    <ul className={`chips chips-${tone}`}>
+      {done.map((e) => (
+        <li key={e.key} className="chip">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="m5 13 4 4 10-10" />
+          </svg>
+          {e.label}
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -651,7 +719,13 @@ function ShiftDetail({
           </span>
         </div>
         <div className="detail-row">
-          <span className="detail-label">Starts</span>
+          <span className="detail-label">
+            {new Date(shift.endsAt) < new Date()
+              ? "Finished"
+              : new Date(shift.startsAt) < new Date()
+                ? "Running"
+                : "Starts"}
+          </span>
           <span className="detail-value">{describeRelative(shift.startsAt, shift.endsAt)}</span>
         </div>
         <div className="detail-row">
@@ -665,7 +739,7 @@ function ShiftDetail({
           </div>
         )}
         <div className="detail-row">
-          <span className="detail-label">Assigned</span>
+          <span className="detail-label">Assigned to</span>
           <span className="detail-value">
             {canManage ? (
               <select
@@ -674,7 +748,7 @@ function ShiftDetail({
                 onChange={(e) => onAssign(e.target.value || null)}
                 disabled={busy}
               >
-                <option value="">-- Unassigned --</option>
+                <option value="">Nobody assigned</option>
                 {people.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name} ({p.role})
@@ -690,10 +764,12 @@ function ShiftDetail({
             )}
           </span>
         </div>
-        {person && rescue.shiftId === shift.id && rescue.confirmedBySms && (
+        {person && rescue.shiftId === shift.id && rescue.completed && (
           <div className="detail-row">
-            <span className="detail-label">Confirmation</span>
-            <span className="detail-value">Text message sent</span>
+            <span className="detail-label">Confirmed in</span>
+            <span className="detail-value">
+              <CompletedChips completed={rescue.completed} tone="light" />
+            </span>
           </div>
         )}
       </div>
@@ -718,7 +794,11 @@ function ShiftDetail({
                 onClick={() => onUnfulfillAndRescue(shift.id)}
                 disabled={busy || rescue.active}
               >
-                {busy ? "Starting…" : rescue.active ? "Covering another shift" : "Unassign & Schedule Rescue"}
+                {busy
+                  ? "Starting…"
+                  : rescue.active
+                    ? "Busy with another shift"
+                    : "Replace this person"}
               </button>
             </>
           )}
@@ -740,4 +820,13 @@ function ShiftDetail({
       )}
     </section>
   );
+}
+
+function getRoleClass(role: string): string {
+  const normalized = role.toLowerCase();
+  if (normalized.includes("kitchen") || normalized.includes("cook") || normalized.includes("chef")) return "kitchen";
+  if (normalized.includes("server") || normalized.includes("wait")) return "server";
+  if (normalized.includes("bar") || normalized.includes("mixologist")) return "bartender";
+  if (normalized.includes("manager") || normalized.includes("lead")) return "manager";
+  return "default";
 }

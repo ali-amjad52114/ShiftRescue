@@ -133,9 +133,10 @@ export function buildAssistantConfig() {
     maxDurationSeconds,
     endCallFunctionEnabled: true,
     server: { url: toolServerUrl() },
-    // Transcripts have to be requested explicitly or the live panel and the
-    // call log both stay empty.
-    serverMessages: ["tool-calls", "end-of-call-report", "transcript", "status-update"],
+    // "transcript" is not in Vapi's default serverMessages, so neither the live
+    // panel nor the call log receives anything unless it is asked for
+    // explicitly. Every server message goes to the one server.url above.
+    serverMessages: ["transcript", "tool-calls", "status-update", "end-of-call-report"],
   };
 }
 
