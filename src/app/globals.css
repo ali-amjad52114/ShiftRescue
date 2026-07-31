@@ -1544,14 +1544,14 @@ body {
   flex-wrap: wrap;
 }
 
-.summary-gap-tag {
-  font-size: var(--text-caption);
-  letter-spacing: var(--tracking-caption);
-  text-transform: uppercase;
+/* A small ink square instead of the word: it matches the block's fill in the
+   calendar, so the eye connects the row to the shift without a third label. */
+.summary-gap-marker {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
   background: var(--color-ink-black);
-  color: var(--color-paper-white);
-  border-radius: var(--radius-buttons);
-  padding: 2px var(--spacing-8);
 }
 
 .summary-gap-when {

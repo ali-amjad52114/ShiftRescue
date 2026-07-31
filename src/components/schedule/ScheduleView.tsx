@@ -338,8 +338,12 @@ export function ScheduleView() {
           <ul className="summary-gaps">
             {problemSlots.map((shift) => (
               <li key={shift.id} className="summary-gap">
+                {/* No "Unfilled" chip here either: the row sits under a count
+                    that already says how many are unfilled, and carries a Find
+                    coverage button. */}
                 <button className="summary-gap-slot" onClick={() => setSelectedId(shift.id)}>
-                  <span className="summary-gap-tag">Unfilled</span>
+                  <span className="summary-gap-marker" aria-hidden="true" />
+                  <span className="visually-hidden">Unfilled shift:</span>
                   <span className="summary-gap-when">
                     {new Intl.DateTimeFormat("en-GB", { timeZone, weekday: "short", day: "numeric", month: "short" }).format(new Date(shift.startsAt))}
                     {" · "}
