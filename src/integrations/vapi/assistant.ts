@@ -11,6 +11,94 @@ export const vapiApiBase = "https://api.vapi.ai";
 
 const openaiModel = process.env.VAPI_OPENAI_MODEL || "gpt-4o";
 
+// Every stage of the pipeline is swappable by env so a provider can be A/B'd
+// against `node testing/latency/cli.ts report <callId>` without a code change.
+// The defaults keep all four languages; the faster alternatives do not all
+// cover Urdu and Punjabi, so they are a deliberate choice, not a default.
+const transcriberProvider = process.env.VAPI_TRANSCRIBER_PROVIDER || "openai";
+const transcriberModel = process.env.VAPI_TRANSCRIBER_MODEL || "gpt-4o-transcribe";
+const voiceProvider = process.env.VAPI_VOICE_PROVIDER || "openai";
+
+/**
+ * Whether this venue's calls happen somewhere loud.
+ *
+ * Workers answer from kitchens, bus stops and living rooms with a television
+ * on. Two settings have to move together for that, and getting one right on its
+ * own makes the call worse, so they live behind a single switch.
+ */
+export function isNoisyEnvironment(): boolean {
+  return process.env.VAPI_NOISY_ENVIRONMENT === "true";
+}
+
+/**
+ * Krisp-style removal of background voices and noise before anything reaches
+ * the transcriber. This is what makes voice-activity barge-in usable at all on
+ * a noisy line — without it every passing conversation looks like the worker
+ * starting to speak.
+ */
+export function denoisingEnabled(): boolean {
+  return process.env.VAPI_DENOISING !== "off";
+}
+
+/**
+ * How aggressively the assistant yields the floor, and how it decides the
+ * worker has finished.
+ *
+ * `stopSpeakingPlan.numWords` is the barge-in rule. Above zero, Vapi waits for
+ * the transcriber to emit that many words before cutting the audio, which on a
+ * slow multilingual transcriber is most of a second of talking over the worker.
+ * At zero it stops on voice activity alone — much faster, but on a noisy line
+ * background chatter also stops it, so a loud venue wants a word or two of
+ * evidence that it is really the worker speaking.
+ *
+ * `startSpeakingPlan` is the other half. `waitSeconds` alone waits for silence,
+ * and in a room with a conversation going on the line is never silent, so the
+ * assistant sits there hearing speech and never decides the worker has
+ * finished. `transcriptionEndpointingPlan` endpoints on what was actually
+ * transcribed instead, which is the only thing that works when the audio never
+ * goes quiet. It is language-agnostic, unlike Vapi's smart-endpointing models,
+ * which matters because half these calls are not in English.
+ */
+export function buildSpeakingPlan() {
+  const noisy = isNoisyEnvironment();
+
+  return {
+    startSpeakingPlan: {
+      // How long a pause has to last before the worker is treated as finished.
+      waitSeconds: Number(process.env.VAPI_START_WAIT_SECONDS ?? 0.2),
+      transcriptionEndpointingPlan: {
+        // A finished sentence is a finished turn; answer straight away.
+        onPunctuationSeconds: 0.1,
+        // No punctuation means they are probably mid-thought. Longer on a noisy
+        // line, where partial transcripts arrive ragged.
+        onNoPunctuationSeconds: noisy ? 1.5 : 1.1,
+        // "six", "twenty two" — someone reading out a time usually has more coming.
+        onNumberSeconds: 0.5,
+      },
+    },
+    stopSpeakingPlan: {
+      numWords: Number(process.env.VAPI_STOP_NUM_WORDS ?? (noisy ? 2 : 0)),
+      voiceSeconds: noisy ? 0.3 : 0.15,
+      backoffSeconds: 0.6,
+    },
+  };
+}
+
+
+/**
+ * How long the line stays open with nobody speaking before Vapi hangs up.
+ *
+ * This is the pause at the end of a call: the assistant has said its closing
+ * line, the worker has said goodbye, and the call sits there until either the
+ * model calls endCall or this timeout fires. At 20 seconds that dead air was
+ * long enough to feel broken. Ten is enough to survive a worker pausing to
+ * think without leaving them holding a silent phone.
+ */
+export const silenceTimeoutSeconds = Number(process.env.VAPI_SILENCE_TIMEOUT_SECONDS ?? 10);
+
+/** Hard ceiling on one call. A worker call that runs long has gone wrong. */
+export const maxDurationSeconds = Number(process.env.VAPI_MAX_CALL_SECONDS ?? 300);
+
 /**
  * Assistant-level config: OpenAI for the brain, OpenAI transcription and voice
  * so English, Spanish, Urdu and Punjabi all run through one provider.
@@ -26,22 +114,28 @@ export function buildAssistantConfig() {
       tools: buildVapiTools(),
     },
     transcriber: {
-      provider: "openai",
-      model: "gpt-4o-transcribe",
+      provider: transcriberProvider,
+      model: transcriberModel,
     },
     voice: {
-      provider: "openai",
+      provider: voiceProvider,
       voiceId: process.env.VAPI_OPENAI_VOICE || "alloy",
     },
     firstMessage:
       "Hi, this is the scheduling team calling to check your availability for a shift. Do you have a minute?",
-    // Let the worker cut in mid-sentence.
-    startSpeakingPlan: { waitSeconds: 0.4 },
-    stopSpeakingPlan: { numWords: 1, voiceSeconds: 0.2, backoffSeconds: 1 },
-    silenceTimeoutSeconds: 20,
-    maxDurationSeconds: 300,
+    // Let the worker cut in mid-sentence, including over the greeting — someone
+    // answering with "hello? who is this?" should be heard, not spoken over.
+    ...buildSpeakingPlan(),
+    firstMessageInterruptionsEnabled: true,
+    // Strip background voices before the transcriber hears them.
+    backgroundDenoisingEnabled: denoisingEnabled(),
+    silenceTimeoutSeconds,
+    maxDurationSeconds,
     endCallFunctionEnabled: true,
     server: { url: toolServerUrl() },
+    // Transcripts have to be requested explicitly or the live panel and the
+    // call log both stay empty.
+    serverMessages: ["tool-calls", "end-of-call-report", "transcript", "status-update"],
   };
 }
 
@@ -61,6 +155,9 @@ export function buildAssistantOverrides(context: ShiftCallContext) {
       endTime: context.endTime,
       location: context.location,
       pay: context.pay,
+      maxPay: context.maxPay,
+      payHeadroom: context.payHeadroom,
+      venueName: context.venueName,
     },
     model: {
       provider: "openai",

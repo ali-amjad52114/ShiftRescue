@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "test": "vitest run",
+    "profile": "node --no-warnings=MODULE_TYPELESS_PACKAGE_JSON testing/latency/cli.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

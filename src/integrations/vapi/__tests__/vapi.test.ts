@@ -23,6 +23,9 @@ const context: ShiftCallContext = {
   endTime: "10:00 PM",
   location: "Downtown San Francisco",
   pay: "$24 per hour",
+  maxPay: "$29 per hour",
+  payHeadroom: "$5",
+  venueName: "Harbour Street Kitchen",
 };
 
 describe("resolveLanguage", () => {

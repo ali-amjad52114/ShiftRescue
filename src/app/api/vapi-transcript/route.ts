@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { appendTranscriptLine } from "@/lib/workflow/transcript";
 import { publicWorkflowState } from "@/lib/workflow/state";
+import { recordTranscriptLine } from "@/lib/calls/log";
 
 /**
  * Live transcript from the call.
@@ -35,11 +36,18 @@ export async function POST(req: Request) {
     const workerId =
       message.workerId ?? message.call?.assistantOverrides?.variableValues?.workerId;
 
-    const state = await appendTranscriptLine({
-      speaker,
-      text: message.transcript ?? message.text ?? "",
+    const text = message.transcript ?? message.text ?? "";
+
+    // The live panel keeps only the current call; the call log keeps the whole
+    // conversation against the call it belongs to.
+    await recordTranscriptLine({
+      callId: message.call?.id,
       workerId,
+      speaker,
+      text,
     });
+
+    const state = await appendTranscriptLine({ speaker, text, workerId });
 
     return NextResponse.json({ success: true, state: publicWorkflowState(state) });
   } catch (error) {

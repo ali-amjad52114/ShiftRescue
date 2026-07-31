@@ -41,8 +41,10 @@ const globalForWorkflow = globalThis as unknown as {
  * the index re-derived, so adding or removing an employee mid-run cannot make
  * the workflow call the wrong person.
  */
-async function hydrate(stored: WorkflowState | null): Promise<WorkflowState> {
-  const workers = await callableEmployees();
+function hydrate(
+  stored: WorkflowState | null,
+  workers: WorkflowState["workers"],
+): WorkflowState {
   if (!stored) return createInitialState(workers);
 
   const index = stored.currentWorkerId
@@ -59,8 +61,16 @@ async function hydrate(stored: WorkflowState | null): Promise<WorkflowState> {
 
 export async function getWorkflowState(): Promise<WorkflowState> {
   const redis = getRedis();
-  if (!redis) return hydrate(globalForWorkflow.workflowState ?? null);
-  return hydrate(await redis.get<WorkflowState>(STATE_KEY));
+  if (!redis) return hydrate(globalForWorkflow.workflowState ?? null, await callableEmployees());
+
+  // The roster and the run state are independent keys. Read them concurrently:
+  // this sits on the tool-webhook path, where every serial Redis round trip is
+  // silence the worker hears mid-call.
+  const [stored, workers] = await Promise.all([
+    redis.get<WorkflowState>(STATE_KEY),
+    callableEmployees(),
+  ]);
+  return hydrate(stored, workers);
 }
 
 export async function updateWorkflowState(newState: WorkflowState): Promise<WorkflowState> {

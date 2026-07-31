@@ -47,6 +47,67 @@ DEMO_WORKER_3_PHONE=
 
 Never commit real credentials.
 
+### Optional voice tuning
+
+Every stage of the call pipeline can be swapped without a code change, so a
+provider can be A/B'd against a real call. Defaults are the values that cover
+all four languages (English, Spanish, Urdu, Punjabi).
+
+```env
+VAPI_OPENAI_MODEL=gpt-4o                # brain
+VAPI_TRANSCRIBER_PROVIDER=openai        # e.g. azure, deepgram
+VAPI_TRANSCRIBER_MODEL=gpt-4o-transcribe
+VAPI_VOICE_PROVIDER=openai
+VAPI_OPENAI_VOICE=alloy
+VAPI_START_WAIT_SECONDS=0.2             # pause before the assistant may reply
+VAPI_SILENCE_TIMEOUT_SECONDS=10         # dead air before Vapi hangs up
+VAPI_MAX_CALL_SECONDS=300
+VAPI_NOISY_ENVIRONMENT=false            # true if workers answer from loud places
+VAPI_DENOISING=on                       # "off" to disable background-voice removal
+VAPI_STOP_NUM_WORDS=                    # override the barge-in rule directly
+VENUE_NAME=Harbour Street Kitchen       # spoken on every call
+SHIFT_MAX_PAY_INCREASE=5                # negotiating room, per hour
+```
+
+Measure before and after with `npm run profile` — see `testing/README.md`.
+
+## How shift details reach the assistant
+
+Every fact the assistant may speak comes from one shift record and is rendered
+once, on the way out:
+
+```
+src/lib/shifts/store.ts        ScheduledShift — startsAt/endsAt as ISO instants
+  ↓  getShift(shiftId)
+src/lib/workflow/coverage.ts   startCoverage() → state.shift
+  ↓  spokenShiftWindow() renders instants into "Friday, July 31" / "6:00 PM"
+src/lib/workflow/actions.ts    dialCurrentWorker()
+  ↓  startA1MobileCall({ shift })
+src/integrations/a1mobile/client.ts  buildCallContext() adds maxPay + venueName
+  ↓  buildAssistantOverrides(context)
+src/integrations/vapi/assistant.ts   variableValues + per-call system prompt
+  ↓
+src/integrations/vapi/prompt.md      {{date}} {{startTime}} {{pay}} {{maxPay}} …
+```
+
+A manager command (`/api/voiceos-command`) enters the same pipeline at
+`state.shift` instead of at the store. `spokenShiftWindow()` in
+[src/lib/time/schedule.ts](src/lib/time/schedule.ts) is the single place the
+spoken forms are derived, so neither entry point can hand the assistant a blank
+date.
+
+## Call logs
+
+Every call writes an append-only record: the exact greeting, system prompt and
+variables the assistant was given, each final transcript line, the decision tool
+it fired, the settled rate, and how the call ended.
+
+- Store: [src/lib/calls/log.ts](src/lib/calls/log.ts) (Redis, last 50 calls)
+- Local mirror: `logs/vapi-calls.jsonl` — gitignored, disable with `CALL_LOG_FILE=off`
+- Read it: `GET /api/call-logs`, `GET /api/call-logs?attemptId=…` (operator login required)
+
+Phone numbers are never written to the log.
+
 ## How to run the project
 
 ```bash

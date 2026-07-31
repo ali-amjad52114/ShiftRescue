@@ -20,5 +20,9 @@ campaign-template.csv
 # so keep the rule here rather than in .git/info/exclude, which is never cloned.
 ARCHITECTURE.md
 SWAYAM-WORK.md
+testing_plan.md
+
+# Call logs carry full transcripts of real calls with real workers.
+logs/
 .playwright-mcp/
 .claude/

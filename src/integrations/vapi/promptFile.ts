@@ -19,6 +19,9 @@ export const PROMPT_PLACEHOLDERS = [
   "endTime",
   "location",
   "pay",
+  "maxPay",
+  "payHeadroom",
+  "venueName",
 ] as const;
 
 export type PromptPlaceholder = (typeof PROMPT_PLACEHOLDERS)[number];

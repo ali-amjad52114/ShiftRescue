@@ -42,7 +42,17 @@ export function buildVapiTools(): VapiToolDefinition[] {
         name: "accept_shift",
         description:
           "Call when the worker has clearly agreed to take the shift. Use only after an explicit yes.",
-        parameters: noModelParameters,
+        parameters: {
+          type: "object" as const,
+          properties: {
+            agreedPay: {
+              type: "string",
+              description:
+                "The hourly rate the worker agreed to, exactly as you said it out loud, for example '$26 per hour'. Use the posted rate if pay was never negotiated. Anything above the authorised ceiling is rejected by the backend.",
+            },
+          },
+          required: [],
+        },
       },
       server,
       parameters: trustedParameters("accepted"),

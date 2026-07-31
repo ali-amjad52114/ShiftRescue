@@ -4,11 +4,9 @@ import {
   vapiAssistantId,
   vapiPhoneNumberId,
 } from "./assistant";
-import {
-  DEFAULT_TIME_ZONE,
-  formatSpokenDate,
-  formatSpokenTime,
-} from "../../lib/time/schedule";
+import { spokenShiftWindow } from "../../lib/time/schedule";
+import { VENUE_NAME } from "../../lib/shifts/store";
+import { maxPayFor, maxPayIncrease } from "./pay";
 import { resolveLanguage } from "./prompt";
 import type {
   ShiftCallContext,
@@ -27,12 +25,6 @@ let mockCallCounter = 0;
  * shift written by either shape still reads correctly over the phone.
  */
 export function buildShiftCallContext(input: StartVapiShiftCallInput): ShiftCallContext {
-  const { startsAt, endsAt, timeZone } = input.shift;
-  const zone = timeZone || DEFAULT_TIME_ZONE;
-
-  const spoken = (pre: string | undefined, iso: string | undefined, format: typeof formatSpokenTime) =>
-    pre || (iso ? format(iso, zone) : "");
-
   return {
     workerId: input.workerId,
     shiftId: input.shift.id,
@@ -42,11 +34,12 @@ export function buildShiftCallContext(input: StartVapiShiftCallInput): ShiftCall
     workerName: input.workerName,
     language: resolveLanguage(input.language),
     role: input.shift.role,
-    date: spoken(input.shift.date, startsAt, formatSpokenDate),
-    startTime: spoken(input.shift.startTime, startsAt, formatSpokenTime),
-    endTime: spoken(input.shift.endTime, endsAt, formatSpokenTime),
+    ...spokenShiftWindow(input.shift),
     location: input.shift.location,
     pay: input.shift.pay,
+    maxPay: maxPayFor(input.shift.pay),
+    payHeadroom: `$${maxPayIncrease()}`,
+    venueName: VENUE_NAME,
   };
 }
 

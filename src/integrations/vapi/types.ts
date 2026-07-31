@@ -18,6 +18,12 @@ export interface ShiftCallContext {
   endTime: string;
   location: string;
   pay: string;
+  /** Highest rate the assistant may offer if the worker pushes back on pay. */
+  maxPay: string;
+  /** The negotiating room, spoken as an amount, e.g. "$5". */
+  payHeadroom: string;
+  /** Venue the call is on behalf of, so the prompt is not hardcoded to one. */
+  venueName: string;
 }
 
 /** The single structured result the backend expects from the call. */
@@ -25,6 +31,11 @@ export interface VapiDecisionResult {
   workerId: string;
   attemptId: string;
   decision: WorkerDecision;
+  /**
+   * Rate the worker agreed to, when the assistant negotiated above the posted
+   * one. Model-supplied and therefore untrusted — clamped server-side.
+   */
+  agreedPay?: string;
 }
 
 export interface StartVapiShiftCallInput {
@@ -85,6 +96,9 @@ export interface VapiToolCallWebhook {
         parameters?: string | Record<string, unknown>;
       };
     }>;
+    role?: string;
+    transcript?: string;
+    transcriptType?: string;
     toolCallList?: Array<{
       id: string;
       name?: string;

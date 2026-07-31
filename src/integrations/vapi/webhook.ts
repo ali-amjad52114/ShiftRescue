@@ -12,10 +12,19 @@ const DECISION_BY_TOOL: Record<string, WorkerDecision> = {
   needs_clarification: "needs_clarification",
 };
 
+/**
+ * The last instruction the model sees before it closes. Vapi feeds this back as
+ * the tool result, so it outranks the system prompt for the next turn — which
+ * makes it the most reliable place to force a short goodbye and an immediate
+ * hangup rather than another lap around the shift details.
+ */
 const SPOKEN_ACK: Record<WorkerDecision, string> = {
-  accepted: "Acceptance recorded. Say a confirmation text will arrive after the schedule is updated, then end the call.",
-  declined: "Decline recorded. Thank the worker and end the call.",
-  needs_clarification: "Logged for follow-up. Tell the worker the team will follow up, then end the call.",
+  accepted:
+    "Recorded. Say ONE short sentence confirming the date and start time and that a text is coming, then call the end call function immediately. Do not restate the shift, do not ask if they need anything else.",
+  declined:
+    "Recorded. Say ONE short thank-you, then call the end call function immediately. Do not ask them to reconsider.",
+  needs_clarification:
+    "Logged. Say ONE short sentence that the team will follow up, then call the end call function immediately.",
 };
 
 function parseArguments(raw: unknown): Record<string, unknown> {
@@ -67,7 +76,11 @@ export function parseVapiToolCall(
 
     if (!workerId || !attemptId) continue;
 
-    return { toolCallId: call.id, result: { workerId, attemptId, decision } };
+    // Model-supplied, unlike the two above. Carried through as free text and
+    // clamped against the shift's authorised ceiling by the workflow.
+    const agreedPay = typeof args.agreedPay === "string" ? args.agreedPay : undefined;
+
+    return { toolCallId: call.id, result: { workerId, attemptId, decision, agreedPay } };
   }
 
   return null;

@@ -1,4 +1,6 @@
 import { getShift, assignShift, type ScheduledShift } from "../shifts/store";
+import { spokenShiftWindow } from "../time/schedule";
+import { dialActiveWorker, type DecisionOptions } from "./actions";
 import { getWorkflowState, updateWorkflowState } from "./state";
 import type { Shift, WorkflowState } from "./types";
 
@@ -24,6 +26,10 @@ function toWorkflowShift(shift: ScheduledShift): Shift {
     startsAt: shift.startsAt,
     endsAt: shift.endsAt,
     timeZone: shift.timeZone,
+    // A scheduled shift stores only instants. The spoken forms are what the
+    // assistant reads out and what the confirmation text repeats, so they are
+    // rendered here rather than left for the dial to discover missing.
+    ...spokenShiftWindow(shift),
     location: shift.location,
     pay: shift.pay,
     assignedWorkerId: shift.assignedEmployeeId,
@@ -36,7 +42,10 @@ function toWorkflowShift(shift: ScheduledShift): Shift {
  * The engine holds one run at a time, so a second request while a rescue is in
  * flight is refused rather than silently replacing the run in progress.
  */
-export async function startCoverage(shiftId: string): Promise<WorkflowState> {
+export async function startCoverage(
+  shiftId: string,
+  options: DecisionOptions = {},
+): Promise<WorkflowState> {
   const shift = await getShift(shiftId);
   if (!shift) throw new Error(`No shift with id ${shiftId}`);
   if (shift.assignedEmployeeId) throw new Error("That shift is already covered");
@@ -57,21 +66,25 @@ export async function startCoverage(shiftId: string): Promise<WorkflowState> {
     proof: {},
   };
 
-  if (next.workers.length > 0) {
-    const first = next.workers[0];
-    next.currentWorkerIndex = 0;
-    next.currentWorkerId = first.id;
-    next.status = "CALLING_WORKER";
-    next.timeline = [
-      event(`Looking for cover for the ${shift.role} shift`),
-      event(`Calling ${first.name} in ${first.language}`),
-    ];
-  } else {
+  if (next.workers.length === 0) {
     next.timeline = [event("No active staff on the roster to call")];
     next.status = "INCOMPLETE";
+    return updateWorkflowState(next);
   }
 
-  return updateWorkflowState(next);
+  const first = next.workers[0];
+  next.currentWorkerIndex = 0;
+  next.currentWorkerId = first.id;
+  next.status = "CALLING_WORKER";
+  next.activeAttemptId = null;
+  next.timeline = [
+    event(`Looking for cover for the ${shift.role} shift`),
+    event(`Calling ${first.name} in ${first.language}`),
+  ];
+
+  // Actually ring them. The route passes after(), so the button returns as soon
+  // as the run is recorded rather than waiting on the Vapi dial.
+  return dialActiveWorker(next, options);
 }
 
 function event(message: string) {

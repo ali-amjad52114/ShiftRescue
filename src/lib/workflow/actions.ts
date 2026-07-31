@@ -4,11 +4,13 @@ import {
 } from "../../integrations/a1mobile/client";
 import { classifyEndedReason, waitForCallOutcome } from "../../integrations/a1mobile/status";
 import {
-  DEFAULT_TIME_ZONE,
   formatSpokenDate,
   formatSpokenTime,
   resolveShiftWindow,
+  spokenShiftWindow,
 } from "../time/schedule";
+import { settleAgreedPay } from "../../integrations/vapi/pay";
+import { closeCallLog, recordCallEvent } from "../calls/log";
 import { getWorkflowState, updateWorkflowState } from "./state";
 import type { Shift, WorkerDecision, WorkflowState } from "./types";
 
@@ -56,21 +58,19 @@ async function dialCurrentWorker(state: WorkflowState): Promise<void> {
     const worker = state.workers[state.currentWorkerIndex];
     if (!worker) return;
 
-    const { role, location, pay, date, startTime, endTime } = state.shift;
+    const { role, location, pay } = state.shift;
+    // Derived, never read straight off the shift: a shift started from the
+    // schedule carries only absolute instants, and passing those through as ""
+    // had the assistant saying "a shift on ,  to ,".
+    const { date, startTime, endTime } = spokenShiftWindow(state.shift);
+
     const result = await startA1MobileCall({
       workerId: worker.id,
       workerName: worker.name,
       phone: worker.phone,
       language: worker.language,
       shiftId: state.shift.id,
-      shift: {
-        role,
-        location,
-        pay,
-        date: date ?? "",
-        startTime: startTime ?? "",
-        endTime: endTime ?? "",
-      },
+      shift: { role, location, pay, date, startTime, endTime },
     });
 
     if (result.success && result.callId && result.attemptId) {
@@ -89,6 +89,69 @@ async function dialCurrentWorker(state: WorkflowState): Promise<void> {
     );
     if (!advanceToNextWorker(state)) return;
   }
+}
+
+/**
+ * Where the next dial runs.
+ *
+ * Vapi holds the assistant silent until our tool webhook replies, so anything
+ * done before that reply is dead air the worker hears mid-conversation. Placing
+ * the next outbound call takes a Vapi API round trip, which is far and away the
+ * most expensive thing that used to happen there. The webhook route passes
+ * Next's `after()` so the dial runs once the response is on the wire; every
+ * other caller keeps the old inline behaviour.
+ */
+export type DeferFn = (task: () => Promise<void>) => void | Promise<void>;
+
+const runInline: DeferFn = (task) => task();
+
+export interface DecisionOptions {
+  defer?: DeferFn;
+}
+
+/**
+ * Moves the queue on and dials whoever is next.
+ *
+ * The advanced queue is persisted *before* the dial so that a deferred dial —
+ * and any webhook that lands in the gap — reads the position we just committed
+ * rather than the one we are about to leave. The dial itself re-reads for the
+ * same reason, and a non-null activeAttemptId means something else got there
+ * first. An inline dial still returns the post-dial state, so callers keep
+ * seeing the new call id in the same response; a deferred one has nothing to
+ * report yet and falls back to the committed state.
+ */
+async function persistThenDial(state: WorkflowState, defer: DeferFn): Promise<WorkflowState> {
+  const committed = await updateWorkflowState(state);
+
+  let dialed: WorkflowState | undefined;
+  await defer(async () => {
+    const fresh = await getWorkflowState();
+    if (fresh.status !== "CALLING_WORKER" || fresh.activeAttemptId) return;
+    await dialCurrentWorker(fresh);
+    dialed = await updateWorkflowState(fresh);
+  });
+
+  return dialed ?? committed;
+}
+
+async function advanceAndDial(state: WorkflowState, defer: DeferFn): Promise<WorkflowState> {
+  if (!advanceToNextWorker(state)) return updateWorkflowState(state);
+  return persistThenDial(state, defer);
+}
+
+/**
+ * Places the call for whoever the queue already points at.
+ *
+ * Exported so a rescue started from the schedule rings the same way one started
+ * from a manager command does. startCoverage() used to set the status to
+ * CALLING_WORKER and write "Calling Maria" to the timeline without ever placing
+ * a call, so the dashboard showed a rescue in progress and nobody's phone rang.
+ */
+export async function dialActiveWorker(
+  state: WorkflowState,
+  options: DecisionOptions = {},
+): Promise<WorkflowState> {
+  return persistThenDial(state, options.defer ?? runInline);
 }
 
 /**
@@ -150,21 +213,16 @@ async function sendConfirmationSms(state: WorkflowState): Promise<void> {
 
   if (!worker || !state.shift) return;
 
-  const { role, location, pay, date, startTime, endTime, startsAt, endsAt, timeZone } = state.shift;
-  const zone = timeZone || DEFAULT_TIME_ZONE;
+  const { role, location, pay } = state.shift;
+  // Same derivation the call uses, so the text confirms exactly what was said
+  // on the phone — including a rate that was negotiated upwards.
+  const { date, startTime, endTime } = spokenShiftWindow(state.shift);
 
   const result = await sendShiftConfirmationSms({
     phone: worker.phone,
     language: worker.language,
     workerName: worker.name,
-    shift: {
-      role,
-      location,
-      pay,
-      date: date || (startsAt ? formatSpokenDate(startsAt, zone) : ""),
-      startTime: startTime || (startsAt ? formatSpokenTime(startsAt, zone) : ""),
-      endTime: endTime || (endsAt ? formatSpokenTime(endsAt, zone) : ""),
-    },
+    shift: { role, location, pay, date, startTime, endTime },
   });
 
   if (!result.success || !result.messageId) {
@@ -245,11 +303,17 @@ export async function handleVoiceosCommand(payload: {
   return updateWorkflowState(state);
 }
 
-export async function handleVapiResult(payload: {
-  workerId: string;
-  attemptId: string;
-  decision: WorkerDecision;
-}) {
+export async function handleVapiResult(
+  payload: {
+    workerId: string;
+    attemptId: string;
+    decision: WorkerDecision;
+    /** Model-supplied and untrusted; clamped against the shift's ceiling below. */
+    agreedPay?: string;
+  },
+  options: DecisionOptions = {},
+) {
+  const defer = options.defer ?? runInline;
   const state = await getWorkflowState();
 
   // If already complete or worker accepted, ignore late calls
@@ -271,19 +335,51 @@ export async function handleVapiResult(payload: {
     throw new Error("Decision does not match the active call attempt");
   }
 
+  await recordCallEvent({
+    attemptId: payload.attemptId,
+    workerId: payload.workerId,
+    event: {
+      type: "decision",
+      at: new Date().toISOString(),
+      detail: { decision: payload.decision, agreedPay: payload.agreedPay },
+    },
+    patch: { decision: payload.decision },
+  });
+
   if (payload.decision === "declined") {
     state.activeAttemptId = null;
     state.status = "WORKER_DECLINED";
     addTimelineEntry(state, `${workerName} declined shift`);
 
-    if (advanceToNextWorker(state)) {
-      await dialCurrentWorker(state);
-    }
+    return advanceAndDial(state, defer);
   } else if (payload.decision === "accepted") {
     state.activeAttemptId = null;
     state.status = "WORKER_ACCEPTED";
     if (state.shift) {
       state.shift.assignedWorkerId = payload.workerId;
+
+      // The assistant may raise the rate to close a shift, but only within the
+      // budget. It reports what it said out loud; the ceiling is enforced here
+      // because nothing said on a phone call is authoritative.
+      const settled = settleAgreedPay(state.shift.pay, payload.agreedPay);
+      if (settled.raise > 0) {
+        addTimelineEntry(
+          state,
+          `${workerName} negotiated the rate to ${settled.pay}` +
+            (settled.clamped ? " (capped at the authorised maximum)" : ""),
+        );
+        state.shift.pay = settled.pay;
+        await recordCallEvent({
+          attemptId: payload.attemptId,
+          workerId: payload.workerId,
+          event: {
+            type: "decision",
+            at: new Date().toISOString(),
+            detail: { settledPay: settled.pay, raise: settled.raise, clamped: settled.clamped },
+          },
+          patch: { agreedPay: settled.pay },
+        });
+      }
     }
     // Credit the worker who actually accepted. Without this the dashboard kept
     // showing whoever was mid-call and named the wrong person as covering.
@@ -299,9 +395,7 @@ export async function handleVapiResult(payload: {
   } else if (payload.decision === "needs_clarification") {
     state.activeAttemptId = null;
     addTimelineEntry(state, `${workerName} could not confirm availability; trying the next worker`);
-    if (advanceToNextWorker(state)) {
-      await dialCurrentWorker(state);
-    }
+    return advanceAndDial(state, defer);
   }
 
   return updateWorkflowState(state);
@@ -315,11 +409,17 @@ export async function handleVapiResult(payload: {
  * promise is killed as soon as the response is sent. Whichever arrives first
  * advances the queue, and the attempt guards below stop the other repeating it.
  */
-export async function handleVapiCallEnded(event: {
-  callId?: string;
-  endedReason?: string;
-}) {
+export async function handleVapiCallEnded(
+  event: {
+    callId?: string;
+    endedReason?: string;
+  },
+  options: DecisionOptions = {},
+) {
+  const defer = options.defer ?? runInline;
   const state = await getWorkflowState();
+
+  await closeCallLog({ callId: event.callId, endedReason: event.endedReason });
 
   // A decision already moved the run on, so this report is just the call
   // hanging up afterwards.
@@ -342,11 +442,7 @@ export async function handleVapiCallEnded(event: {
   );
 
   state.activeAttemptId = null;
-  if (advanceToNextWorker(state)) {
-    await dialCurrentWorker(state);
-  }
-
-  return updateWorkflowState(state);
+  return advanceAndDial(state, defer);
 }
 
 export async function handleVoiceosResult(payload: {

@@ -1,7 +1,12 @@
 import { callbackInviteSms, shiftConfirmationSms } from "./messages";
 import type { ShiftDetails } from "./messages";
 import { buildAssistantOverrides } from "../vapi/assistant";
+import { maxPayFor, maxPayIncrease } from "../vapi/pay";
 import { resolveLanguage } from "../vapi/prompt";
+import { buildVapiTools } from "../vapi/tools";
+import { recordCallEvent } from "../../lib/calls/log";
+import { VENUE_NAME } from "../../lib/shifts/store";
+import type { ShiftCallContext } from "../vapi/types";
 import type {
   A1MobileCallResult,
   A1MobileClaimedNumber,
@@ -149,6 +154,41 @@ export async function sendA1MobileSms(input: {
   };
 }
 
+/**
+ * Everything the assistant is allowed to know about this call.
+ *
+ * The caller passes the shift already rendered into spoken strings; anything
+ * missing here is heard as a blank on the phone, so the shape is built in one
+ * place rather than inline at the fetch.
+ */
+export function buildCallContext(input: {
+  workerId: string;
+  language: string;
+  shiftId: string;
+  attemptId: string;
+  workerName?: string;
+  shift?: ShiftDetails;
+}): ShiftCallContext {
+  const pay = input.shift?.pay ?? "";
+
+  return {
+    workerId: input.workerId,
+    shiftId: input.shiftId,
+    attemptId: input.attemptId,
+    language: resolveLanguage(input.language),
+    workerName: input.workerName ?? "",
+    role: input.shift?.role ?? "",
+    date: input.shift?.date ?? "",
+    startTime: input.shift?.startTime ?? "",
+    endTime: input.shift?.endTime ?? "",
+    location: input.shift?.location ?? "",
+    pay,
+    maxPay: maxPayFor(pay),
+    payHeadroom: `$${maxPayIncrease()}`,
+    venueName: VENUE_NAME,
+  };
+}
+
 async function dialViaVapi(input: {
   workerId: string;
   phone: string;
@@ -171,6 +211,32 @@ async function dialViaVapi(input: {
     };
   }
 
+  // Keep a1mobile as the transport boundary while applying the per-call prompt
+  // and server-trusted decision tools on every dial.
+  const context = buildCallContext(input);
+  const overrides = buildAssistantOverrides(context);
+
+  // Logged before the dial, so a call that fails to connect still leaves a
+  // record of exactly what we were about to say.
+  await recordCallEvent({
+    attemptId: input.attemptId,
+    workerId: input.workerId,
+    event: { type: "call.requested", at: new Date().toISOString() },
+    patch: {
+      workerName: context.workerName,
+      language: context.language,
+      shiftId: context.shiftId,
+      assistantInput: {
+        assistantId,
+        firstMessage: overrides.firstMessage,
+        systemPrompt: overrides.model.messages[0]?.content ?? "",
+        variableValues: overrides.variableValues,
+        model: overrides.model.model,
+        toolNames: buildVapiTools().map((tool) => tool.function.name),
+      },
+    },
+  });
+
   try {
     const response = await fetch(`${VAPI_BASE_URL}/call/phone`, {
       method: "POST",
@@ -182,26 +248,21 @@ async function dialViaVapi(input: {
         assistantId,
         phoneNumberId,
         customer: { number: input.phone },
-        // Keep a1mobile as the transport boundary while applying Piotre's
-        // per-call prompt and server-trusted decision tools on every dial.
-        assistantOverrides: buildAssistantOverrides({
-          workerId: input.workerId,
-          shiftId: input.shiftId,
-          attemptId: input.attemptId,
-          language: resolveLanguage(input.language),
-          workerName: input.workerName ?? "",
-          role: input.shift?.role ?? "",
-          date: input.shift?.date ?? "",
-          startTime: input.shift?.startTime ?? "",
-          endTime: input.shift?.endTime ?? "",
-          location: input.shift?.location ?? "",
-          pay: input.shift?.pay ?? "",
-        }),
+        assistantOverrides: overrides,
       }),
     });
 
     const text = await response.text();
     if (!response.ok) {
+      await recordCallEvent({
+        attemptId: input.attemptId,
+        workerId: input.workerId,
+        event: {
+          type: "call.failed",
+          at: new Date().toISOString(),
+          detail: { status: response.status, body: text.slice(0, 500) },
+        },
+      });
       return {
         success: false,
         mode: "outbound",
@@ -210,6 +271,13 @@ async function dialViaVapi(input: {
     }
 
     const data = JSON.parse(text) as { id?: string };
+    await recordCallEvent({
+      attemptId: input.attemptId,
+      workerId: input.workerId,
+      event: { type: "call.placed", at: new Date().toISOString(), detail: { callId: data.id } },
+      patch: { callId: data.id },
+    });
+
     return {
       success: true,
       mode: "outbound",
@@ -217,6 +285,11 @@ async function dialViaVapi(input: {
       attemptId: input.attemptId,
     };
   } catch (error) {
+    await recordCallEvent({
+      attemptId: input.attemptId,
+      workerId: input.workerId,
+      event: { type: "call.failed", at: new Date().toISOString(), detail: { error: String(error) } },
+    });
     return {
       success: false,
       mode: "outbound",
@@ -290,10 +363,33 @@ export async function startA1MobileCall(input: {
     `att_${input.workerId}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
   if (isSimulated()) {
+    // Simulated calls are logged too, so the call log can be exercised without
+    // dialling anyone and a local run shows the same shape as production.
+    const callId = `sim-call-${input.workerId}-${Date.now()}`;
+    const context = buildCallContext({ ...input, attemptId });
+    const overrides = buildAssistantOverrides(context);
+    await recordCallEvent({
+      attemptId,
+      workerId: input.workerId,
+      event: { type: "call.placed", at: new Date().toISOString(), detail: { callId, simulated: true } },
+      patch: {
+        callId,
+        workerName: context.workerName,
+        language: context.language,
+        shiftId: context.shiftId,
+        assistantInput: {
+          firstMessage: overrides.firstMessage,
+          systemPrompt: overrides.model.messages[0]?.content ?? "",
+          variableValues: overrides.variableValues,
+          toolNames: buildVapiTools().map((tool) => tool.function.name),
+        },
+      },
+    });
+
     return {
       success: true,
       mode: originationMode(),
-      callId: `sim-call-${input.workerId}-${Date.now()}`,
+      callId,
       attemptId,
     };
   }

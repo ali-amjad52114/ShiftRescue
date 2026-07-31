@@ -190,6 +190,38 @@ export function formatSpokenTime(iso: string, timeZone: string): string {
   }).format(new Date(iso));
 }
 
+/**
+ * The three spoken strings the assistant and the confirmation SMS need, for any
+ * shift regardless of which code path created it.
+ *
+ * Shifts arrive in two shapes. A shift created from a manager command carries
+ * pre-rendered strings; one read off the schedule carries only absolute
+ * instants. Deriving here means no caller can hand the assistant an empty date
+ * — which is exactly what happened when a rescue started from the calendar and
+ * the worker heard "we have a shift on ,  to ,".
+ */
+export function spokenShiftWindow(shift: {
+  startsAt?: string;
+  endsAt?: string;
+  timeZone?: string;
+  date?: string;
+  startTime?: string;
+  endTime?: string;
+}): { date: string; startTime: string; endTime: string } {
+  const zone = shift.timeZone || DEFAULT_TIME_ZONE;
+  const from = (
+    stored: string | undefined,
+    iso: string | undefined,
+    format: (iso: string, timeZone: string) => string,
+  ) => stored?.trim() || (iso ? format(iso, zone) : "");
+
+  return {
+    date: from(shift.date, shift.startsAt, formatSpokenDate),
+    startTime: from(shift.startTime, shift.startsAt, formatSpokenTime),
+    endTime: from(shift.endTime, shift.endsAt, formatSpokenTime),
+  };
+}
+
 export function formatRange(startsAt: string, endsAt: string, timeZone: string): string {
   return `${formatTime(startsAt, timeZone)}–${formatTime(endsAt, timeZone)}`;
 }
