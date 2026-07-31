@@ -9,6 +9,7 @@ import {
   formatSpokenTime,
   resolveShiftWindow,
 } from "../time/schedule";
+import { assignShift, createShift, listShifts, type ScheduledShift } from "../shifts/store";
 import { getWorkflowState, updateWorkflowState } from "./state";
 import type { Shift, WorkerDecision, WorkflowState } from "./types";
 
@@ -51,7 +52,7 @@ function advanceToNextWorker(state: WorkflowState): boolean {
  * Vapi answers as soon as the call is queued, so this returns while the
  * conversation is still live; the decision arrives later via the webhook.
  */
-export async function dialCurrentWorker(state: WorkflowState): Promise<void> {
+async function dialCurrentWorker(state: WorkflowState): Promise<void> {
   while (state.shift && state.status === "CALLING_WORKER") {
     const worker = state.workers[state.currentWorkerIndex];
     if (!worker) return;
@@ -93,6 +94,46 @@ export async function dialCurrentWorker(state: WorkflowState): Promise<void> {
     );
     if (!advanceToNextWorker(state)) return;
   }
+}
+
+/**
+ * Point the queue at the first worker and dial.
+ *
+ * Shared by both entry points — the schedule's "Find coverage" button and a
+ * spoken VoiceOS command — so a rescue started either way places the same real
+ * call. Keeping this in one place is the whole point: the schedule path used to
+ * announce "Calling Maria" in the timeline and never ring anyone.
+ */
+export async function beginCalling(state: WorkflowState): Promise<void> {
+  if (state.workers.length === 0) {
+    state.status = "INCOMPLETE";
+    state.currentWorkerIndex = -1;
+    state.currentWorkerId = null;
+    state.activeAttemptId = null;
+    addTimelineEntry(state, "No active staff on the roster to call.");
+    return;
+  }
+
+  const first = state.workers[0];
+  state.currentWorkerIndex = 0;
+  state.currentWorkerId = first.id;
+  state.activeAttemptId = null;
+  state.status = "CALLING_WORKER";
+  addTimelineEntry(state, `Calling ${first.name} in ${first.language}`);
+  await dialCurrentWorker(state);
+}
+
+/**
+ * Mirror an acceptance onto the schedule. This store is our own system of
+ * record, so the calendar fills the moment someone says yes rather than waiting
+ * on VoiceOS — which may not be running at all. Only ever writes an assignment
+ * the workflow actually recorded.
+ */
+async function assignOnSchedule(state: WorkflowState): Promise<void> {
+  const shiftId = state.shift?.id;
+  const workerId = state.shift?.assignedWorkerId;
+  if (!shiftId || !workerId) return;
+  await assignShift(shiftId, workerId);
 }
 
 /**
@@ -183,6 +224,34 @@ async function sendConfirmationSms(state: WorkflowState): Promise<void> {
 
 const REQUIRED_COMMAND_FIELDS = ["role", "date", "startTime", "endTime", "location"] as const;
 
+/**
+ * VoiceOS describes a shift in words, so the run has to be attached to a real
+ * row in the schedule — otherwise the calendar shows no gap being worked and
+ * the acceptance has nothing to fill in.
+ *
+ * An existing slot is reused only when the role and the window match exactly.
+ * Snapping "6 PM to 10 PM" onto a nearby 6-11 rota slot would make the assistant
+ * say one thing while the schedule meant another, so anything else is booked as
+ * a new shift at the time the manager actually asked for.
+ */
+async function resolveScheduledShift(input: {
+  role: string;
+  startsAt: string;
+  endsAt: string;
+  location: string;
+  pay: string;
+}): Promise<ScheduledShift> {
+  const existing = (await listShifts()).find(
+    (candidate) =>
+      !candidate.assignedEmployeeId &&
+      candidate.role.toLowerCase() === input.role.toLowerCase() &&
+      candidate.startsAt === input.startsAt &&
+      candidate.endsAt === input.endsAt,
+  );
+
+  return existing ?? createShift(input);
+}
+
 export async function handleVoiceosCommand(payload: {
   role: string;
   date: string;
@@ -210,21 +279,31 @@ export async function handleVoiceosCommand(payload: {
     endTime: payload.endTime,
   });
 
-  const shift: Shift = {
-    id: `shift_${Date.now()}`,
+  // The run is pinned to a real row in the schedule so the calendar shows the
+  // gap being worked, and so an acceptance has something to fill in.
+  const scheduled = await resolveScheduledShift({
     role: payload.role,
     startsAt: window.startsAt,
     endsAt: window.endsAt,
-    timeZone: window.timeZone,
+    location: payload.location,
+    pay: payload.pay || "$24 per hour",
+  });
+
+  const shift: Shift = {
+    id: scheduled.id,
+    role: scheduled.role,
+    startsAt: scheduled.startsAt,
+    endsAt: scheduled.endsAt,
+    timeZone: scheduled.timeZone,
     // The instants are the truth. These are the same window pre-rendered in the
     // venue's zone for the dashboard card and the confirmation SMS, which both
     // want a spoken string rather than an ISO timestamp. Derived here because
     // this is the only place a Shift is created, so they cannot drift apart.
-    date: formatSpokenDate(window.startsAt, window.timeZone),
-    startTime: formatSpokenTime(window.startsAt, window.timeZone),
-    endTime: formatSpokenTime(window.endsAt, window.timeZone),
-    location: payload.location,
-    pay: payload.pay || "$24 per hour",
+    date: formatSpokenDate(scheduled.startsAt, scheduled.timeZone),
+    startTime: formatSpokenTime(scheduled.startsAt, scheduled.timeZone),
+    endTime: formatSpokenTime(scheduled.endsAt, scheduled.timeZone),
+    location: scheduled.location,
+    pay: scheduled.pay || payload.pay || "$24 per hour",
     assignedWorkerId: null,
   };
 
@@ -236,15 +315,7 @@ export async function handleVoiceosCommand(payload: {
 
   addTimelineEntry(state, `Manager command received: Uncovered ${shift.role} shift created`);
 
-  // Automatically start with Worker 1
-  if (state.workers.length > 0) {
-    state.currentWorkerIndex = 0;
-    const worker1 = state.workers[0];
-    state.currentWorkerId = worker1.id;
-    state.status = "CALLING_WORKER";
-    addTimelineEntry(state, `Calling ${worker1.name} in ${worker1.language}`);
-    await dialCurrentWorker(state);
-  }
+  await beginCalling(state);
 
   return updateWorkflowState(state);
 }
@@ -256,8 +327,10 @@ export async function handleVapiResult(payload: {
 }) {
   const state = await getWorkflowState();
 
-  // If already complete or worker accepted, ignore late calls
-  if (state.status === "COMPLETE" || state.status === "WORKER_ACCEPTED" || state.status === "TRIGGERING_VOICEOS" || state.status === "VOICEOS_COMPLETE") {
+  // Once somebody has taken the shift, a later decision from another attempt is
+  // just a call finishing behind us. Keyed on the assignment rather than a list
+  // of statuses so it cannot be missed when the status flow changes.
+  if (state.shift?.assignedWorkerId || state.status === "COMPLETE") {
     return state;
   }
 
@@ -297,9 +370,17 @@ export async function handleVapiResult(payload: {
     }
     addTimelineEntry(state, `${workerName} accepted shift!`);
 
-    // Trigger VoiceOS action step
-    state.status = "TRIGGERING_VOICEOS";
-    addTimelineEntry(state, `Triggering VoiceOS to update Schedule, Calendar, Slack, Gmail, and Google Sheets`);
+    // The schedule is our own system of record, so it fills straight away. The
+    // VoiceOS mirrors — Calendar, Slack, Gmail, Sheets — report separately and
+    // add their own proof; the shift is covered whether or not they ever do.
+    await assignOnSchedule(state);
+    addTimelineEntry(state, `Schedule updated: ${workerName} now covers the ${state.shift?.role ?? "shift"} shift`);
+
+    // Texting the worker is the last step of the loop we control end to end, so
+    // it is not gated behind an external system that may not be listening.
+    state.status = "SENDING_SMS";
+    addTimelineEntry(state, "Requesting a1mobile to send the confirmation SMS");
+    await sendConfirmationSms(state);
   } else if (payload.decision === "needs_clarification") {
     state.activeAttemptId = null;
     addTimelineEntry(state, `${workerName} could not confirm availability; trying the next worker`);
@@ -364,15 +445,14 @@ export async function handleVoiceosResult(payload: {
 }) {
   const state = await getWorkflowState();
 
-  if (payload.success) {
-    // Completion means "this shift is now covered". Without an acceptance
-    // there is nobody to cover it, and recording proof would claim the
-    // schedule, Calendar, Slack, Gmail and Sheets were updated for an empty
-    // shift — a fabricated success.
-    if (!state.shift?.assignedWorkerId) {
-      throw new Error("Cannot complete a rescue before a worker has accepted the shift");
-    }
+  // VoiceOS mirrors an acceptance that already happened. Without this, proof
+  // could be posted at any time onto an empty run and the dashboard would show
+  // Calendar and Slack ids for a shift nobody ever took.
+  if (!state.shift?.assignedWorkerId) {
+    throw new Error("No accepted shift to report VoiceOS results for");
+  }
 
+  if (payload.success) {
     // A successful result must include proof from every VoiceOS side effect.
     // Never fall back to invented IDs or silently accept partial completion.
     if (!payload.scheduleUpdated) {
@@ -398,18 +478,18 @@ export async function handleVoiceosResult(payload: {
       gmailMessageId,
       spreadsheetId,
       spreadsheetUpdateRange,
+      voiceosFailed: false,
     };
-    state.status = "VOICEOS_COMPLETE";
     addTimelineEntry(state, "VoiceOS updated the schedule app, Google Calendar, Slack, Gmail, and Google Sheets");
-
-    // VoiceOS never supplies SMS proof. The backend always performs the
-    // a1mobile side effect itself and stores only the returned message ID.
-    state.status = "SENDING_SMS";
-    addTimelineEntry(state, "Requesting a1mobile to send the confirmation SMS");
-    await sendConfirmationSms(state);
   } else {
-    state.status = "INCOMPLETE";
+    // An acceptance that really happened is not undone by a mirror failing.
+    // Record it so the rail can mark the VoiceOS step failed, and only call the
+    // whole run incomplete when nobody had taken the shift in the first place.
+    state.proof = { ...state.proof, voiceosFailed: true };
     addTimelineEntry(state, "VoiceOS failed to update backend systems");
+    if (!state.shift?.assignedWorkerId) {
+      state.status = "INCOMPLETE";
+    }
   }
 
   return updateWorkflowState(state);

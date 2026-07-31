@@ -1,5 +1,5 @@
-import { dialCurrentWorker } from "./actions";
-import { getShift, assignShift, type ScheduledShift } from "../shifts/store";
+import { getShift, updateShift, type ScheduledShift } from "../shifts/store";
+import { beginCalling } from "./actions";
 import { getWorkflowState, updateWorkflowState } from "./state";
 import type { Shift, WorkflowState } from "./types";
 
@@ -16,6 +16,25 @@ const ACTIVE_STATUSES = new Set([
 
 export function isRescueActive(state: WorkflowState): boolean {
   return ACTIVE_STATUSES.has(state.status);
+}
+
+/**
+ * Hand the shift back when a rescue is cleared, so the gap the demo exists to
+ * close is there again. Without this, resetting leaves the shift covered and
+ * there is nothing left to rescue on the next run.
+ *
+ * Only ever undoes an assignment this run made: a shift somebody else has since
+ * been put on is left alone.
+ */
+export async function releaseRescuedShift(state: WorkflowState): Promise<void> {
+  const shiftId = state.shift?.id;
+  const workerId = state.shift?.assignedWorkerId;
+  if (!shiftId || !workerId) return;
+
+  const scheduled = await getShift(shiftId);
+  if (scheduled?.assignedEmployeeId !== workerId) return;
+
+  await updateShift(shiftId, { assignedEmployeeId: null });
 }
 
 function toWorkflowShift(shift: ScheduledShift): Shift {
@@ -53,45 +72,21 @@ export async function startCoverage(shiftId: string): Promise<WorkflowState> {
     status: "SHIFT_CREATED",
     currentWorkerIndex: -1,
     currentWorkerId: null,
-    timeline: [],
-    transcript: [],
+    activeAttemptId: null,
+    timeline: [
+      {
+        id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        message: `Looking for cover for the ${shift.role} shift`,
+        timestamp: new Date().toISOString(),
+      },
+    ],
     proof: {},
   };
 
-  if (next.workers.length > 0) {
-    const first = next.workers[0];
-    next.currentWorkerIndex = 0;
-    next.currentWorkerId = first.id;
-    next.status = "CALLING_WORKER";
-    next.timeline = [
-      event(`Looking for cover for the ${shift.role} shift`),
-      event(`Calling ${first.name} in ${first.language}`),
-    ];
-    await dialCurrentWorker(next);
-  } else {
-    next.timeline = [event("No active staff on the roster to call")];
-    next.status = "INCOMPLETE";
-    await updateWorkflowState(next);
-  }
+  // Dialling goes through the workflow engine rather than being reimplemented
+  // here. This screen used to write "Calling Maria" into the timeline and place
+  // no call at all, which looked identical to a working rescue.
+  await beginCalling(next);
 
-  return getWorkflowState();
-}
-
-function event(message: string) {
-  return {
-    id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-    message,
-    timestamp: new Date().toISOString(),
-  };
-}
-
-/**
- * Mirror an accepted rescue onto the schedule so the calendar shows the shift
- * as covered. Only ever writes an assignment the workflow actually recorded.
- */
-export async function syncScheduleAssignment(state: WorkflowState): Promise<void> {
-  const shiftId = state.shift?.id;
-  const workerId = state.shift?.assignedWorkerId;
-  if (!shiftId || !workerId) return;
-  await assignShift(shiftId, workerId);
+  return updateWorkflowState(next);
 }

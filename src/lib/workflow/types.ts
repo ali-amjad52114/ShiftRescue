@@ -67,6 +67,12 @@ export interface WorkflowProof {
   spreadsheetId?: string;
   spreadsheetUpdateRange?: string;
   smsMessageId?: string;
+  /**
+   * Recorded outcome rather than proof: true when VoiceOS reported that it could
+   * not complete its side effects, so the rail can show that step as failed
+   * instead of merely un-run.
+   */
+  voiceosFailed?: boolean;
 }
 
 export interface WorkflowState {

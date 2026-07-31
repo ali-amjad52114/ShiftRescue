@@ -7,6 +7,15 @@ import { DEFAULT_TIME_ZONE } from "@/lib/time/schedule";
 import { isAuthenticated } from "@/lib/auth/session";
 
 /**
+ * A development placeholder is not a completed action. docs/API-CONTRACTS.md
+ * states that ids containing `sim-` or `mock-` are not proof, so a simulated
+ * run must not light up the same chips a real one does.
+ */
+function confirmed(value: string | undefined): boolean {
+  return typeof value === "string" && value.trim() !== "" && !/(^|[-_])(sim|mock)-/i.test(value);
+}
+
+/**
  * Everything the schedule screen needs. Public, so it carries display names
  * only — never phone numbers.
  */
@@ -43,17 +52,18 @@ export async function GET() {
         : null,
       timeline: state.timeline,
       transcript: state.transcript ?? [],
-      confirmedBySms: Boolean(state.proof.smsMessageId),
+      confirmedBySms: confirmed(state.proof.smsMessageId),
       // What the connected apps actually confirmed. Booleans only: the IDs
       // themselves are operator detail and stay in the admin console.
       completed: {
         schedule: Boolean(state.proof.scheduleUpdated),
-        calendar: Boolean(state.proof.calendarEventId),
-        slack: Boolean(state.proof.slackMessageId),
-        email: Boolean(state.proof.gmailMessageId),
-        sheet: Boolean(state.proof.spreadsheetId),
-        sms: Boolean(state.proof.smsMessageId),
+        calendar: confirmed(state.proof.calendarEventId),
+        slack: confirmed(state.proof.slackMessageId),
+        email: confirmed(state.proof.gmailMessageId),
+        sheet: confirmed(state.proof.spreadsheetId),
+        sms: confirmed(state.proof.smsMessageId),
       },
+      voiceosFailed: Boolean(state.proof.voiceosFailed),
     },
   });
 }

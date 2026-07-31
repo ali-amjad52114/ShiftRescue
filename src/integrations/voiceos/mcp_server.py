@@ -244,8 +244,17 @@ def wait_for_shift_acceptance(
         )
 
     deadline = time.monotonic() + timeout_seconds
-    accepted_statuses = {"WORKER_ACCEPTED", "TRIGGERING_VOICEOS"}
-    completed_statuses = {"VOICEOS_COMPLETE", "SENDING_SMS", "COMPLETE"}
+    # What VoiceOS acts on is the acceptance itself, not a status label. The
+    # backend now covers the shift and texts the worker the moment someone says
+    # yes, so a run can already read COMPLETE while every external update is
+    # still outstanding. Reading the status alone made VoiceOS skip its work.
+    voiceos_proof_keys = (
+        "calendarEventId",
+        "slackMessageId",
+        "gmailMessageId",
+        "spreadsheetId",
+        "spreadsheetUpdateRange",
+    )
     last_state: dict[str, Any] | None = None
 
     while True:
@@ -258,7 +267,15 @@ def wait_for_shift_acceptance(
         nested_state = last_state.get("state")
         workflow_state = nested_state if isinstance(nested_state, dict) else last_state
         status = last_state.get("status") or workflow_state.get("status")
-        if status in completed_statuses:
+        shift = last_state.get("shift") or workflow_state.get("shift")
+        proof = last_state.get("proof") or workflow_state.get("proof") or {}
+        assigned_worker_id = (
+            shift.get("assignedWorkerId") if isinstance(shift, dict) else None
+        )
+
+        # Done means VoiceOS's own ids are already on the record — not that the
+        # backend finished its half of the loop.
+        if all(proof.get(key) for key in voiceos_proof_keys):
             return _result(
                 ok=True,
                 retryable=False,
@@ -266,18 +283,14 @@ def wait_for_shift_acceptance(
                 message="VoiceOS actions were already recorded. Do not repeat external actions.",
                 data={
                     "status": status,
-                    "shift": last_state.get("shift") or workflow_state.get("shift"),
-                    "proof": last_state.get("proof") or workflow_state.get("proof") or {},
+                    "shift": shift,
+                    "proof": proof,
                     "nextAction": "Report the existing completion to the manager without changing the schedule, Calendar, or Slack again.",
                 },
             )
 
-        if status in accepted_statuses:
-            shift = last_state.get("shift") or workflow_state.get("shift")
+        if assigned_worker_id:
             workers = last_state.get("workers") or workflow_state.get("workers") or []
-            assigned_worker_id = (
-                shift.get("assignedWorkerId") if isinstance(shift, dict) else None
-            ) or last_state.get("workerId") or workflow_state.get("currentWorkerId")
             worker = next(
                 (
                     candidate

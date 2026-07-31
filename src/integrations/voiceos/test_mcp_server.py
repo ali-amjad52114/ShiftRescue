@@ -133,6 +133,9 @@ class VoiceOSMCPServerTests(unittest.TestCase):
             "proof": {
                 "calendarEventId": "calendar_123",
                 "slackMessageId": "slack_123",
+                "gmailMessageId": "gmail_123",
+                "spreadsheetId": "sheet_123",
+                "spreadsheetUpdateRange": "'Shift Events'!A8:V8",
             },
         }
 
@@ -146,6 +149,46 @@ class VoiceOSMCPServerTests(unittest.TestCase):
         self.assertEqual(result["code"], "ALREADY_COMPLETED")
         self.assertEqual(result["data"]["proof"], completed_status["proof"])
         self.assertIn("without changing", result["data"]["nextAction"])
+
+    def test_wait_still_asks_for_actions_when_the_backend_already_closed_its_half(
+        self,
+    ) -> None:
+        # The backend covers the shift and texts the worker on acceptance, so a
+        # run reads COMPLETE while VoiceOS still has every external update to do.
+        # Reading the status alone made VoiceOS skip its work entirely.
+        backend_done = {
+            "status": "COMPLETE",
+            "shift": {"id": "shift-demo", "assignedWorkerId": "worker-2"},
+            "proof": {"callId": "call_1", "smsMessageId": "sms_1"},
+            "state": {
+                "workers": [
+                    {"id": "worker-1", "name": "Maria", "language": "Spanish"},
+                    {"id": "worker-2", "name": "Ahmed", "language": "Urdu"},
+                ],
+            },
+        }
+
+        with patch.object(mcp_server, "_request_json", return_value=backend_done):
+            result = mcp_server.wait_for_shift_acceptance()
+
+        self.assertEqual(result["code"], "WORKER_ACCEPTED")
+        self.assertEqual(result["data"]["worker"]["id"], "worker-2")
+
+    def test_wait_asks_for_the_rest_when_voiceos_proof_is_partial(self) -> None:
+        partial = {
+            "status": "COMPLETE",
+            "shift": {"id": "shift-demo", "assignedWorkerId": "worker-2"},
+            "proof": {"calendarEventId": "calendar_123", "slackMessageId": "slack_123"},
+            "state": {
+                "workers": [{"id": "worker-2", "name": "Ahmed", "language": "Urdu"}],
+            },
+        }
+
+        with patch.object(mcp_server, "_request_json", return_value=partial):
+            result = mcp_server.wait_for_shift_acceptance()
+
+        # Half-finished is not finished: Gmail and Sheets still have to happen.
+        self.assertEqual(result["code"], "WORKER_ACCEPTED")
 
     def test_report_shift_completion_posts_all_proof_fields(self) -> None:
         backend = {"status": "VOICEOS_COMPLETE"}

@@ -1695,3 +1695,34 @@ body {
   background: var(--color-pale-sage);
   color: var(--color-deep-forest);
 }
+
+/* A simulated id must never read as evidence. Struck through and labelled, so
+   it cannot be mistaken for a real side effect at a glance or on a projector.
+   docs/API-CONTRACTS.md: sim-/mock- values are not sponsor proof. */
+.proof-val-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  color: var(--color-charcoal);
+  text-decoration: line-through;
+}
+
+.proof-flag {
+  font-family: var(--font-graphik);
+  font-size: var(--text-caption);
+  letter-spacing: var(--tracking-caption);
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--color-paper-white);
+  background: var(--color-ink-black);
+  padding: 1px 6px;
+  border-radius: var(--radius-buttons);
+}
+
+/* A preflight check that will stop the demo working. Ink black, not red: the
+   same halted signal the rest of the UI uses for "this did not happen". */
+.detail-value-alert {
+  color: var(--color-ink-black);
+  border-bottom: 2px solid var(--color-ink-black);
+}
