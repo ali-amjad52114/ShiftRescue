@@ -143,3 +143,4 @@
  GET /api/status 200 in 3ms (next.js: 1177µs, application-code: 1985µs)
  GET /api/status 200 in 3ms (next.js: 1043µs, application-code: 1909µs)
  GET /api/status 200 in 3ms (next.js: 1168µs, application-code: 1955µs)
+[?25h
