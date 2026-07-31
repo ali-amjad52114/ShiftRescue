@@ -54,6 +54,10 @@ def _base_url() -> str:
     return os.environ.get("SHIFTRESCUE_BASE_URL", DEFAULT_BASE_URL).rstrip("/")
 
 
+def _spreadsheet_id() -> str:
+    return os.environ.get("SHIFTRESCUE_SPREADSHEET_ID", "").strip()
+
+
 def _request_json(
     method: str, path: str, payload: dict[str, Any] | None = None
 ) -> dict[str, Any]:
@@ -207,11 +211,18 @@ def start_shift_rescue(
     except BackendRequestError as error:
         LOGGER.warning("Could not start ShiftRescue: %s", error)
         return _error_result(error)
-    return _backend_success(
+    result = _backend_success(
         response,
         code="SHIFT_STARTED",
         message="ShiftRescue started the shift-coverage workflow.",
     )
+    result.setdefault("data", {})["integration"] = {
+        "spreadsheetId": _spreadsheet_id(),
+        "sheetName": "Shift Events",
+        "beforeStage": "BEFORE_CALL",
+        "afterStage": "AFTER_CALL",
+    }
+    return result
 
 
 @mcp.tool()
@@ -293,7 +304,7 @@ def wait_for_shift_acceptance(
                     "status": status,
                     "worker": worker,
                     "shift": shift,
-                    "nextAction": "Update the schedule, create the Calendar event, post the Slack confirmation, then call report_shift_completion.",
+                    "nextAction": "Update the schedule, create the Calendar event, post the Slack confirmation, send the Gmail confirmation, append the AFTER_CALL Google Sheets row, then call report_shift_completion.",
                 },
             )
 
@@ -331,28 +342,43 @@ def report_shift_completion(
     schedule_updated: bool,
     calendar_event_id: str,
     slack_message_id: str,
+    gmail_message_id: str,
+    spreadsheet_id: str,
+    spreadsheet_update_range: str,
     success: bool = True,
     error: str = "",
 ) -> dict[str, Any]:
-    """Report proof after VoiceOS updates the schedule, Calendar, and Slack.
+    """Report proof after VoiceOS completes all connected-app updates.
 
-    Pass the real Calendar event and Slack message IDs. On a failed automation,
-    set success to false and describe the failure in error.
+    Pass the real Calendar, Slack, Gmail, and Google Sheets proof values. On a
+    failed automation, set success to false and describe the failure in error.
     """
     if success and not schedule_updated:
         return _validation_error(
             "schedule_updated must be true when reporting successful completion."
         )
-    if success and (not calendar_event_id.strip() or not slack_message_id.strip()):
+    proof_values = (
+        calendar_event_id.strip(),
+        slack_message_id.strip(),
+        gmail_message_id.strip(),
+        spreadsheet_id.strip(),
+        spreadsheet_update_range.strip(),
+    )
+    if success and any(not value for value in proof_values):
         return _validation_error(
-            "calendar_event_id and slack_message_id are required on success."
+            "calendar_event_id, slack_message_id, gmail_message_id, spreadsheet_id, and spreadsheet_update_range are required on success."
         )
     if success and any(
         "mock" in proof_id.lower()
-        for proof_id in (calendar_event_id.strip(), slack_message_id.strip())
+        for proof_id in proof_values
     ):
         return _validation_error(
-            "Mock proof IDs are not accepted; provide the real Calendar event and Slack message IDs."
+            "Mock proof values are not accepted; provide proof returned by each real connected-app action."
+        )
+    configured_spreadsheet_id = _spreadsheet_id()
+    if success and configured_spreadsheet_id and spreadsheet_id.strip() != configured_spreadsheet_id:
+        return _validation_error(
+            "spreadsheet_id does not match SHIFTRESCUE_SPREADSHEET_ID."
         )
     if not success and not error.strip():
         return _validation_error("error is required when success is false.")
@@ -362,6 +388,9 @@ def report_shift_completion(
         "scheduleUpdated": schedule_updated,
         "calendarEventId": calendar_event_id.strip(),
         "slackMessageId": slack_message_id.strip(),
+        "gmailMessageId": gmail_message_id.strip(),
+        "spreadsheetId": spreadsheet_id.strip(),
+        "spreadsheetUpdateRange": spreadsheet_update_range.strip(),
     }
     if error.strip():
         payload["error"] = error.strip()

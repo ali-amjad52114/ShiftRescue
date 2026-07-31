@@ -122,12 +122,17 @@ describe("Workflow Orchestrator Engine", () => {
       scheduleUpdated: true,
       calendarEventId: "calendar_proof_99",
       slackMessageId: "slack_proof_99",
+      gmailMessageId: "gmail_proof_99",
+      spreadsheetId: "sheet_proof_99",
+      spreadsheetUpdateRange: "'Shift Events'!A8:V8",
       smsMessageId: "sms_proof_99",
     });
 
     expect(state.status).toBe("COMPLETE");
     expect(state.proof.calendarEventId).toBe("calendar_proof_99");
     expect(state.proof.slackMessageId).toBe("slack_proof_99");
+    expect(state.proof.gmailMessageId).toBe("gmail_proof_99");
+    expect(state.proof.spreadsheetId).toBe("sheet_proof_99");
     expect(state.proof.smsMessageId).toBe("sms_proof_99");
   });
 
@@ -153,6 +158,8 @@ describe("Workflow Orchestrator Engine", () => {
     expect(proof.scheduleUpdated).toBeUndefined();
     expect(proof.calendarEventId).toBeUndefined();
     expect(proof.slackMessageId).toBeUndefined();
+    expect(proof.gmailMessageId).toBeUndefined();
+    expect(proof.spreadsheetId).toBeUndefined();
     expect(proof.smsMessageId).toBeUndefined();
   });
 
@@ -165,6 +172,9 @@ describe("Workflow Orchestrator Engine", () => {
       scheduleUpdated: true,
       calendarEventId: "cal_1",
       slackMessageId: "slack_1",
+      gmailMessageId: "gmail_1",
+      spreadsheetId: "sheet_1",
+      spreadsheetUpdateRange: "'Shift Events'!A8:V8",
     });
 
     // No a1mobile credentials here, so the send fails. The run must stop at
@@ -186,6 +196,9 @@ describe("Workflow Orchestrator Engine", () => {
         scheduleUpdated: true,
         calendarEventId: "cal_1",
         slackMessageId: "slack_1",
+        gmailMessageId: "gmail_1",
+        spreadsheetId: "sheet_1",
+        spreadsheetUpdateRange: "'Shift Events'!A8:V8",
       });
 
       expect(state.status).toBe("COMPLETE");
@@ -207,6 +220,9 @@ describe("Workflow Orchestrator Engine", () => {
         scheduleUpdated: true,
         calendarEventId: "cal_1",
         slackMessageId: "slack_1",
+        gmailMessageId: "gmail_1",
+        spreadsheetId: "sheet_1",
+        spreadsheetUpdateRange: "'Shift Events'!A8:V8",
       });
 
       expect(state.shift?.assignedWorkerId).toBe("emp_ahmed");
@@ -297,7 +313,10 @@ describe("Workflow Orchestrator Engine", () => {
         scheduleUpdated: true,
         calendarEventId: "",
         slackMessageId: "slack_proof_99",
+        gmailMessageId: "gmail_proof_99",
+        spreadsheetId: "sheet_proof_99",
+        spreadsheetUpdateRange: "'Shift Events'!A8:V8",
       }),
-    ).rejects.toThrow("Real calendarEventId and slackMessageId");
+    ).rejects.toThrow("Real calendarEventId");
   });
 });

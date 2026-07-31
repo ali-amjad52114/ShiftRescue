@@ -54,6 +54,9 @@ export interface WorkflowProof {
   scheduleUpdated?: boolean;
   calendarEventId?: string;
   slackMessageId?: string;
+  gmailMessageId?: string;
+  spreadsheetId?: string;
+  spreadsheetUpdateRange?: string;
   smsMessageId?: string;
 }
 

@@ -217,7 +217,7 @@ export async function handleVapiResult(payload: {
 
     // Trigger VoiceOS action step
     state.status = "TRIGGERING_VOICEOS";
-    addTimelineEntry(state, `Triggering VoiceOS to update Schedule, Calendar, and Slack`);
+    addTimelineEntry(state, `Triggering VoiceOS to update Schedule, Calendar, Slack, Gmail, and Google Sheets`);
   } else if (payload.decision === "needs_clarification") {
     addTimelineEntry(state, `Call with ${workerName} required clarification`);
   }
@@ -230,6 +230,9 @@ export async function handleVoiceosResult(payload: {
   scheduleUpdated?: boolean;
   calendarEventId?: string;
   slackMessageId?: string;
+  gmailMessageId?: string;
+  spreadsheetId?: string;
+  spreadsheetUpdateRange?: string;
   smsMessageId?: string;
 }) {
   const state = await getWorkflowState();
@@ -243,9 +246,12 @@ export async function handleVoiceosResult(payload: {
 
     const calendarEventId = payload.calendarEventId?.trim();
     const slackMessageId = payload.slackMessageId?.trim();
-    if (!calendarEventId || !slackMessageId) {
+    const gmailMessageId = payload.gmailMessageId?.trim();
+    const spreadsheetId = payload.spreadsheetId?.trim();
+    const spreadsheetUpdateRange = payload.spreadsheetUpdateRange?.trim();
+    if (!calendarEventId || !slackMessageId || !gmailMessageId || !spreadsheetId || !spreadsheetUpdateRange) {
       throw new Error(
-        "Real calendarEventId and slackMessageId values are required for a successful VoiceOS result",
+        "Real calendarEventId, slackMessageId, gmailMessageId, spreadsheetId, and spreadsheetUpdateRange values are required for a successful VoiceOS result",
       );
     }
 
@@ -254,9 +260,12 @@ export async function handleVoiceosResult(payload: {
       scheduleUpdated: true,
       calendarEventId,
       slackMessageId,
+      gmailMessageId,
+      spreadsheetId,
+      spreadsheetUpdateRange,
     };
     state.status = "VOICEOS_COMPLETE";
-    addTimelineEntry(state, "VoiceOS updated the schedule app, Google Calendar, and Slack");
+    addTimelineEntry(state, "VoiceOS updated the schedule app, Google Calendar, Slack, Gmail, and Google Sheets");
 
     const smsMessageId = payload.smsMessageId?.trim();
     if (smsMessageId) {

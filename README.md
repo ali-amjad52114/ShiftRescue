@@ -14,7 +14,7 @@ Manager gives a VoiceOS command
 -> Vapi + OpenAI conducts a multilingual conversation
 -> Worker decision returns to the backend
 -> Backend calls the next worker or triggers VoiceOS actions
--> VoiceOS updates the schedule, Calendar, and Slack
+-> VoiceOS updates the schedule, Calendar, Slack, Gmail, and Google Sheets
 -> a1mobile sends a confirmation SMS
 -> Dashboard displays the workflow and proof
 ```
@@ -39,6 +39,7 @@ VAPI_ASSISTANT_ID=
 A1MOBILE_API_KEY=
 A1MOBILE_PHONE_NUMBER=
 VOICEOS_API_KEY=
+SHIFTRESCUE_SPREADSHEET_ID=
 DEMO_WORKER_1_PHONE=
 DEMO_WORKER_2_PHONE=
 DEMO_WORKER_3_PHONE=
@@ -60,13 +61,14 @@ Open `http://localhost:3000` for the live dashboard (`/dashboard` renders the sa
 - a1mobile outbound calling returns `mock-a1mobile-call-id`.
 - a1mobile SMS returns `mock-a1mobile-message-id` with a `sent` status.
 - Vapi shift calls return `mock-vapi-call-id`.
-- VoiceOS uses the real local MCP bridge in `src/integrations/voiceos/` and rejects missing or mock Calendar and Slack proof IDs.
+- VoiceOS uses the real local MCP bridge in `src/integrations/voiceos/` and rejects incomplete or mock Calendar, Slack, Gmail, and Google Sheets proof.
+- The seeded staffing/payroll workbook compares scheduled and confirmed workers and calculates actual hours, variance, and pay with formulas. VoiceOS must append real before/after rows; seeded rows are demo data only.
 - The workflow waits for a real a1mobile SMS ID instead of inventing completion proof.
 
 The remaining a1mobile and Vapi stubs exist only so teammates can integrate in parallel. They must not be presented as real sponsor proof in the final demo.
 
 ## Final MVP boundary
 
-The project supports only one manager VoiceOS command, one uncovered shift, three hardcoded workers, sequential calls, one decline, one acceptance, three demonstration languages, one VoiceOS schedule update, one Calendar event, one Slack message, one confirmation SMS, one dashboard page, and one in-memory workflow state.
+The project supports only one manager VoiceOS command, one uncovered shift, three hardcoded workers, sequential calls, one decline, one acceptance, three demonstration languages, one VoiceOS schedule update, one Calendar event, one Slack message, one Gmail confirmation, one Google Sheets before/after update, one confirmation SMS, and one dashboard page.
 
 Do not add authentication, databases, queues, microservices, worker ranking, parallel calling, production infrastructure, or features outside this boundary.
