@@ -15,19 +15,26 @@ export type WorkflowStatus =
   | "COMPLETE"
   | "INCOMPLETE";
 
-export interface Worker {
+export interface Employee {
   id: string;
   name: string;
+  /** E.164. Never leaves the server — see publicWorkflowState(). */
   phone: string;
   language: string;
+  role: string;
+  active: boolean;
 }
+
+/** Kept as an alias: the workflow calls an employee a "worker" while on the phone. */
+export type Worker = Employee;
 
 export interface Shift {
   id: string;
   role: string;
-  date: string;
-  startTime: string;
-  endTime: string;
+  /** Absolute instants, plus the zone the shift was scheduled in. */
+  startsAt: string;
+  endsAt: string;
+  timeZone: string;
   location: string;
   pay: string;
   assignedWorkerId: string | null;

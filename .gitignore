@@ -8,5 +8,12 @@ npm-debug.log*
 .env*.local
 .aidesigner/*
 !.aidesigner/.gitkeep
+.env*
+
 Call_list - Sheet1.csv
 campaign-template.csv
+
+# Local working notes. These contain demo phone numbers and live resource ids,
+# so keep the rule here rather than in .git/info/exclude, which is never cloned.
+ARCHITECTURE.md
+SWAYAM-WORK.md

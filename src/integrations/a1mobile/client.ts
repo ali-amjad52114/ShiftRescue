@@ -11,8 +11,15 @@ import type {
 const A1_BASE_URL = "https://hack.a1mobile.com";
 const VAPI_BASE_URL = "https://api.vapi.ai";
 
+// Accept every name the docs and .env.example have used. Picking one and being
+// "right" just means someone loses an hour to a silently empty header.
 function teamKey(): string {
-  return process.env.A1MOBILE_API_KEY || process.env.A1_TEAM_KEY || "";
+  return (
+    process.env.A1MOBILE_API_KEY ||
+    process.env.A1MOBILE_TEAM_KEY ||
+    process.env.A1_TEAM_KEY ||
+    ""
+  );
 }
 
 function originationMode(): OriginationMode {
@@ -145,6 +152,7 @@ async function dialViaVapi(input: {
   phone: string;
   language: string;
   shiftId: string;
+  attemptId: string;
   workerName?: string;
   shift?: ShiftDetails;
 }): Promise<A1MobileCallResult> {
@@ -179,6 +187,7 @@ async function dialViaVapi(input: {
           variableValues: {
             workerId: input.workerId,
             shiftId: input.shiftId,
+            attemptId: input.attemptId,
             language: input.language,
             workerName: input.workerName ?? "",
             role: input.shift?.role ?? "",
@@ -202,7 +211,12 @@ async function dialViaVapi(input: {
     }
 
     const data = JSON.parse(text) as { id?: string };
-    return { success: true, mode: "outbound", callId: data.id };
+    return {
+      success: true,
+      mode: "outbound",
+      callId: data.id,
+      attemptId: input.attemptId,
+    };
   } catch (error) {
     return {
       success: false,
@@ -227,6 +241,7 @@ export async function sendShiftConfirmationSms(input: {
 async function inviteCallbackViaSms(input: {
   phone: string;
   language: string;
+  attemptId: string;
   shift?: ShiftDetails;
 }): Promise<A1MobileCallResult> {
   const number = process.env.A1MOBILE_PHONE_NUMBER;
@@ -244,10 +259,20 @@ async function inviteCallbackViaSms(input: {
   });
 
   if (!sms.success) {
-    return { success: false, mode: "inbound", error: sms.error };
+    return {
+      success: false,
+      mode: "inbound",
+      attemptId: input.attemptId,
+      error: sms.error,
+    };
   }
 
-  return { success: true, mode: "inbound", callId: sms.messageId };
+  return {
+    success: true,
+    mode: "inbound",
+    callId: sms.messageId,
+    attemptId: input.attemptId,
+  };
 }
 
 export async function startA1MobileCall(input: {
@@ -255,22 +280,34 @@ export async function startA1MobileCall(input: {
   phone: string;
   language: string;
   shiftId: string;
+  attemptId?: string;
   workerName?: string;
   shift?: ShiftDetails;
 }): Promise<A1MobileCallResult> {
+  // Every attempt gets an id. The assistant echoes it back with the decision so
+  // a duplicate or late webhook cannot advance the workflow twice.
+  const attemptId =
+    input.attemptId ??
+    `att_${input.workerId}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
   if (isSimulated()) {
     return {
       success: true,
       mode: originationMode(),
       callId: `sim-call-${input.workerId}-${Date.now()}`,
+      attemptId,
     };
   }
 
   if (!input.phone) {
-    return { success: false, error: `no phone number for ${input.workerId}` };
+    return {
+      success: false,
+      attemptId,
+      error: `no phone number for ${input.workerId}`,
+    };
   }
 
   return originationMode() === "inbound"
-    ? inviteCallbackViaSms(input)
-    : dialViaVapi(input);
+    ? inviteCallbackViaSms({ ...input, attemptId })
+    : dialViaVapi({ ...input, attemptId });
 }

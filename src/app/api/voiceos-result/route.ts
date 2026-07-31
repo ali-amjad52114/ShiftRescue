@@ -5,7 +5,7 @@ import { publicWorkflowState } from "@/lib/workflow/state";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const state = handleVoiceosResult(body);
+    const state = await handleVoiceosResult(body);
     return NextResponse.json({
       success: true,
       status: state.status,

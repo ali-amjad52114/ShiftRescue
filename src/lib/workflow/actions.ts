@@ -1,7 +1,7 @@
 import { getWorkflowState, updateWorkflowState } from "./state";
-import type { Shift, WorkerDecision, WorkflowProof } from "./types";
+import type { Shift, WorkerDecision, WorkflowState } from "./types";
 
-function addTimelineEntry(state: ReturnType<typeof getWorkflowState>, message: string) {
+function addTimelineEntry(state: WorkflowState, message: string) {
   state.timeline.push({
     id: `evt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
     message,
@@ -9,7 +9,9 @@ function addTimelineEntry(state: ReturnType<typeof getWorkflowState>, message: s
   });
 }
 
-export function handleVoiceosCommand(payload: {
+const REQUIRED_COMMAND_FIELDS = ["role", "date", "startTime", "endTime", "location"] as const;
+
+export async function handleVoiceosCommand(payload: {
   role: string;
   date: string;
   startTime: string;
@@ -17,7 +19,16 @@ export function handleVoiceosCommand(payload: {
   location: string;
   pay?: string;
 }) {
-  const state = getWorkflowState();
+  // These endpoints are public webhooks. A malformed command used to produce a
+  // shift with "undefined" fields that the dashboard rendered as real detail.
+  const missing = REQUIRED_COMMAND_FIELDS.filter(
+    (field) => typeof payload?.[field] !== "string" || payload[field].trim() === "",
+  );
+  if (missing.length > 0) {
+    throw new Error(`Missing required shift fields: ${missing.join(", ")}`);
+  }
+
+  const state = await getWorkflowState();
 
   const shift: Shift = {
     id: `shift_${Date.now()}`,
@@ -49,19 +60,26 @@ export function handleVoiceosCommand(payload: {
   return updateWorkflowState(state);
 }
 
-export function handleVapiResult(payload: {
+export async function handleVapiResult(payload: {
   workerId: string;
   decision: WorkerDecision;
 }) {
-  const state = getWorkflowState();
+  const state = await getWorkflowState();
 
   // If already complete or worker accepted, ignore late calls
   if (state.status === "COMPLETE" || state.status === "WORKER_ACCEPTED" || state.status === "TRIGGERING_VOICEOS" || state.status === "VOICEOS_COMPLETE") {
     return state;
   }
 
-  const worker = state.workers.find((w) => w.id === payload.workerId) || state.workers[state.currentWorkerIndex];
+  const workerIndex = state.workers.findIndex((w) => w.id === payload.workerId);
+  const worker = workerIndex >= 0 ? state.workers[workerIndex] : state.workers[state.currentWorkerIndex];
   const workerName = worker ? worker.name : payload.workerId;
+
+  // A duplicate or retried webhook from an earlier worker would otherwise
+  // advance the queue a second time and skip a worker who was never called.
+  if (payload.decision === "declined" && workerIndex >= 0 && workerIndex !== state.currentWorkerIndex) {
+    return state;
+  }
 
   if (payload.decision === "declined") {
     state.status = "WORKER_DECLINED";
@@ -84,6 +102,12 @@ export function handleVapiResult(payload: {
     if (state.shift) {
       state.shift.assignedWorkerId = payload.workerId;
     }
+    // Credit the worker who actually accepted. Without this the dashboard kept
+    // showing whoever was mid-call and named the wrong person as covering.
+    if (workerIndex >= 0) {
+      state.currentWorkerIndex = workerIndex;
+      state.currentWorkerId = payload.workerId;
+    }
     addTimelineEntry(state, `${workerName} accepted shift!`);
 
     // Trigger VoiceOS action step
@@ -96,33 +120,48 @@ export function handleVapiResult(payload: {
   return updateWorkflowState(state);
 }
 
-export function handleVoiceosResult(payload: {
+export async function handleVoiceosResult(payload: {
   success: boolean;
   scheduleUpdated?: boolean;
   calendarEventId?: string;
   slackMessageId?: string;
   smsMessageId?: string;
 }) {
-  const state = getWorkflowState();
+  const state = await getWorkflowState();
 
   if (payload.success) {
+    // A successful result must include proof from every VoiceOS side effect.
+    // Never fall back to invented IDs or silently accept partial completion.
+    if (!payload.scheduleUpdated) {
+      throw new Error("scheduleUpdated must be true for a successful VoiceOS result");
+    }
+
+    const calendarEventId = payload.calendarEventId?.trim();
+    const slackMessageId = payload.slackMessageId?.trim();
+    if (!calendarEventId || !slackMessageId) {
+      throw new Error(
+        "Real calendarEventId and slackMessageId values are required for a successful VoiceOS result",
+      );
+    }
+
     state.proof = {
       ...state.proof,
-      scheduleUpdated: payload.scheduleUpdated ?? true,
-      calendarEventId: payload.calendarEventId || "calendar_123",
-      slackMessageId: payload.slackMessageId || "slack_123",
+      scheduleUpdated: true,
+      calendarEventId,
+      slackMessageId,
     };
     state.status = "VOICEOS_COMPLETE";
-    addTimelineEntry(state, "VoiceOS updated Schedule app, Google Calendar, and Slack");
+    addTimelineEntry(state, "VoiceOS updated the schedule app, Google Calendar, and Slack");
 
-    // Next step: Sending SMS confirmation
-    state.status = "SENDING_SMS";
-    addTimelineEntry(state, "Requesting a1mobile to send confirmation SMS");
-
-    // Automatically complete SMS step (or capture smsMessageId if provided)
-    state.proof.smsMessageId = payload.smsMessageId || "sms_123";
-    state.status = "COMPLETE";
-    addTimelineEntry(state, "Confirmation SMS sent via a1mobile. Rescue complete!");
+    const smsMessageId = payload.smsMessageId?.trim();
+    if (smsMessageId) {
+      state.proof.smsMessageId = smsMessageId;
+      state.status = "COMPLETE";
+      addTimelineEntry(state, "Confirmation SMS sent via a1mobile. Rescue complete!");
+    } else {
+      state.status = "SENDING_SMS";
+      addTimelineEntry(state, "VoiceOS updates complete; awaiting a1mobile confirmation SMS");
+    }
   } else {
     state.status = "INCOMPLETE";
     addTimelineEntry(state, "VoiceOS failed to update backend systems");

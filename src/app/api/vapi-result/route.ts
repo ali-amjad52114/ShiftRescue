@@ -15,7 +15,7 @@ export async function POST(req: Request) {
       return NextResponse.json(reply, { status });
     }
 
-    const state = handleVapiResult(body);
+    const state = await handleVapiResult(body);
     return NextResponse.json({
       success: true,
       status: state.status,

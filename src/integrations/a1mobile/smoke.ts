@@ -4,6 +4,7 @@
 import { callbackInviteSms, shiftConfirmationSms } from "./messages";
 import { extractCallerNumber, resolveInboundCaller } from "./inbound";
 import { sendA1MobileSms, startA1MobileCall } from "./client";
+import { classifyEndedReason } from "./status";
 
 const shift = {
   role: "Kitchen Assistant",
@@ -115,6 +116,74 @@ async function main() {
 
   check("simulate mode returns a call id without network", simulatedCall.success);
   check("simulate mode returns an sms id without network", simulatedSms.success);
+
+  check(
+    "an attempt id is generated when none is supplied",
+    Boolean(simulatedCall.attemptId),
+  );
+
+  const supplied = await startA1MobileCall({
+    workerId: "worker-2",
+    phone: "+14155550102",
+    language: "Urdu",
+    shiftId: "shift-1",
+    attemptId: "att_fixed_123",
+  });
+  check("a supplied attempt id is echoed back", supplied.attemptId === "att_fixed_123");
+
+  const first = await startA1MobileCall({
+    workerId: "worker-1",
+    phone: "+14155550101",
+    language: "Spanish",
+    shiftId: "shift-1",
+  });
+  check(
+    "generated attempt ids are unique per attempt",
+    first.attemptId !== simulatedCall.attemptId,
+  );
+
+  check(
+    "no-answer reasons are not treated as answered",
+    classifyEndedReason("customer-did-not-answer", "ended") === "no-answer" &&
+      classifyEndedReason("customer-busy", "ended") === "no-answer" &&
+      classifyEndedReason("voicemail", "ended") === "no-answer",
+  );
+  check(
+    "a hangup counts as answered",
+    classifyEndedReason("customer-ended-call", "ended") === "answered",
+  );
+  check(
+    "pipeline problems are failures",
+    classifyEndedReason("pipeline-error-openai-llm-failed", "ended") === "failed" &&
+      classifyEndedReason("pipeline-error-429-exceeded-quota", "ended") === "failed",
+  );
+  // These read like failures but mean nobody was reached, so the workflow
+  // should move to the next worker rather than report a broken system.
+  check(
+    "never-connected reasons count as no-answer, not failure",
+    classifyEndedReason(
+      "call.in-progress.error-sip-outbound-call-failed-to-connect",
+      "ended",
+    ) === "no-answer" &&
+      classifyEndedReason("twilio-failed-to-connect-call", "ended") === "no-answer" &&
+      classifyEndedReason("vonage-rejected", "ended") === "no-answer",
+  );
+  // Contains "sip" but is a healthy completion.
+  check(
+    "sip-completed-call is answered, not failed",
+    classifyEndedReason("call.in-progress.sip-completed-call", "ended") === "answered",
+  );
+  check(
+    "genuine sip faults are still failures",
+    classifyEndedReason(
+      "call.in-progress.error-providerfault-outbound-sip-403-forbidden",
+      "ended",
+    ) === "failed",
+  );
+  check(
+    "a live call is not classified as ended",
+    classifyEndedReason(undefined, "in-progress") === "in-progress",
+  );
 
   console.log(
     `\n${failures === 0 ? "all checks passed" : `${failures} check(s) failed`}\n`,

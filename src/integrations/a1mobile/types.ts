@@ -21,4 +21,24 @@ export interface A1MobileSmsResult extends A1MobileResult {
 export interface A1MobileCallResult extends A1MobileResult {
   callId?: string;
   mode?: OriginationMode;
+  attemptId?: string;
+}
+
+// What actually happened on a call attempt. `answered` means a human picked up;
+// it does NOT mean they made a decision.
+export type CallOutcome =
+  | "in-progress"
+  | "answered"
+  | "no-answer"
+  | "failed"
+  | "unknown";
+
+export interface CallStatus {
+  callId: string;
+  outcome: CallOutcome;
+  status?: string;
+  endedReason?: string;
+  transcript?: string;
+  durationSeconds?: number;
+  error?: string;
 }
