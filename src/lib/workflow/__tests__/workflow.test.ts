@@ -7,19 +7,19 @@ import {
 } from "../actions";
 
 describe("Workflow Orchestrator Engine", () => {
-  beforeEach(() => {
-    resetWorkflowState();
+  beforeEach(async () => {
+    await resetWorkflowState();
   });
 
-  it("should initialize with default empty state", () => {
-    const state = getWorkflowState();
+  it("should initialize with default empty state", async () => {
+    const state = await getWorkflowState();
     expect(state.status).toBe("WAITING_FOR_MANAGER_COMMAND");
     expect(state.shift).toBeNull();
     expect(state.timeline).toHaveLength(0);
     expect(state.proof).toEqual({});
   });
 
-  it("should process manager command and begin calling Worker 1 (Maria)", () => {
+  it("should process manager command and begin calling Worker 1 (Maria)", async () => {
     const payload = {
       role: "Kitchen Assistant",
       date: "July 31",
@@ -29,7 +29,7 @@ describe("Workflow Orchestrator Engine", () => {
       pay: "$24 per hour",
     };
 
-    const state = handleVoiceosCommand(payload);
+    const state = await handleVoiceosCommand(payload);
 
     expect(state.status).toBe("CALLING_WORKER");
     expect(state.shift?.role).toBe("Kitchen Assistant");
@@ -40,8 +40,8 @@ describe("Workflow Orchestrator Engine", () => {
     expect(state.timeline[1].message).toContain("Calling Maria in Spanish");
   });
 
-  it("should advance to Worker 2 (Ahmed) when Worker 1 declines", () => {
-    handleVoiceosCommand({
+  it("should advance to Worker 2 (Ahmed) when Worker 1 declines", async () => {
+    await handleVoiceosCommand({
       role: "Kitchen Assistant",
       date: "July 31",
       startTime: "6:00 PM",
@@ -49,7 +49,7 @@ describe("Workflow Orchestrator Engine", () => {
       location: "Downtown San Francisco",
     });
 
-    const state = handleVapiResult({
+    const state = await handleVapiResult({
       workerId: "worker-1",
       decision: "declined",
     });
@@ -61,8 +61,8 @@ describe("Workflow Orchestrator Engine", () => {
     expect(state.timeline.some((t) => t.message.includes("Calling Ahmed in Urdu"))).toBe(true);
   });
 
-  it("should transition to TRIGGERING_VOICEOS when Worker 2 accepts", () => {
-    handleVoiceosCommand({
+  it("should transition to TRIGGERING_VOICEOS when Worker 2 accepts", async () => {
+    await handleVoiceosCommand({
       role: "Kitchen Assistant",
       date: "July 31",
       startTime: "6:00 PM",
@@ -70,16 +70,16 @@ describe("Workflow Orchestrator Engine", () => {
       location: "Downtown San Francisco",
     });
 
-    handleVapiResult({ workerId: "worker-1", decision: "declined" });
-    const state = handleVapiResult({ workerId: "worker-2", decision: "accepted" });
+    await handleVapiResult({ workerId: "worker-1", decision: "declined" });
+    const state = await handleVapiResult({ workerId: "worker-2", decision: "accepted" });
 
     expect(state.status).toBe("TRIGGERING_VOICEOS");
     expect(state.shift?.assignedWorkerId).toBe("worker-2");
     expect(state.timeline.some((t) => t.message.includes("Ahmed accepted"))).toBe(true);
   });
 
-  it("should ignore late worker callbacks once someone has already accepted", () => {
-    handleVoiceosCommand({
+  it("should ignore late worker callbacks once someone has already accepted", async () => {
+    await handleVoiceosCommand({
       role: "Kitchen Assistant",
       date: "July 31",
       startTime: "6:00 PM",
@@ -87,10 +87,10 @@ describe("Workflow Orchestrator Engine", () => {
       location: "Downtown San Francisco",
     });
 
-    handleVapiResult({ workerId: "worker-1", decision: "declined" });
-    handleVapiResult({ workerId: "worker-2", decision: "accepted" });
+    await handleVapiResult({ workerId: "worker-1", decision: "declined" });
+    await handleVapiResult({ workerId: "worker-2", decision: "accepted" });
 
-    const stateAfterLateCallback = handleVapiResult({
+    const stateAfterLateCallback = await handleVapiResult({
       workerId: "worker-3",
       decision: "declined",
     });
@@ -98,8 +98,8 @@ describe("Workflow Orchestrator Engine", () => {
     expect(stateAfterLateCallback.status).toBe("TRIGGERING_VOICEOS");
   });
 
-  it("should store proof IDs and mark COMPLETE upon VoiceOS success", () => {
-    handleVoiceosCommand({
+  it("should store proof IDs and mark COMPLETE upon VoiceOS success", async () => {
+    await handleVoiceosCommand({
       role: "Kitchen Assistant",
       date: "July 31",
       startTime: "6:00 PM",
@@ -107,9 +107,9 @@ describe("Workflow Orchestrator Engine", () => {
       location: "Downtown San Francisco",
     });
 
-    handleVapiResult({ workerId: "worker-2", decision: "accepted" });
+    await handleVapiResult({ workerId: "worker-2", decision: "accepted" });
 
-    const state = handleVoiceosResult({
+    const state = await handleVoiceosResult({
       success: true,
       scheduleUpdated: true,
       calendarEventId: "calendar_proof_99",
@@ -131,11 +131,11 @@ describe("Workflow Orchestrator Engine", () => {
     location: "Downtown San Francisco",
   };
 
-  it("should never invent proof IDs when VoiceOS reports success without them", () => {
-    handleVoiceosCommand(command);
-    handleVapiResult({ workerId: "worker-1", decision: "accepted" });
+  it("should never invent proof IDs when VoiceOS reports success without them", async () => {
+    await handleVoiceosCommand(command);
+    await handleVapiResult({ workerId: "worker-1", decision: "accepted" });
 
-    const state = handleVoiceosResult({ success: true });
+    const state = await handleVoiceosResult({ success: true });
 
     expect(state.proof.calendarEventId).toBeUndefined();
     expect(state.proof.slackMessageId).toBeUndefined();
@@ -145,11 +145,11 @@ describe("Workflow Orchestrator Engine", () => {
     expect(state.status).not.toBe("COMPLETE");
   });
 
-  it("should not claim the SMS was sent without a message ID", () => {
-    handleVoiceosCommand(command);
-    handleVapiResult({ workerId: "worker-1", decision: "accepted" });
+  it("should not claim the SMS was sent without a message ID", async () => {
+    await handleVoiceosCommand(command);
+    await handleVapiResult({ workerId: "worker-1", decision: "accepted" });
 
-    const state = handleVoiceosResult({
+    const state = await handleVoiceosResult({
       success: true,
       scheduleUpdated: true,
       calendarEventId: "cal_1",
@@ -161,30 +161,30 @@ describe("Workflow Orchestrator Engine", () => {
     expect(state.timeline.some((t) => t.message.includes("Rescue complete"))).toBe(false);
   });
 
-  it("should ignore a duplicate decline from a worker who is no longer being called", () => {
-    handleVoiceosCommand(command);
-    handleVapiResult({ workerId: "worker-1", decision: "declined" });
+  it("should ignore a duplicate decline from a worker who is no longer being called", async () => {
+    await handleVoiceosCommand(command);
+    await handleVapiResult({ workerId: "worker-1", decision: "declined" });
 
     // Retried webhook for worker-1 while worker-2 is on the phone.
-    const state = handleVapiResult({ workerId: "worker-1", decision: "declined" });
+    const state = await handleVapiResult({ workerId: "worker-1", decision: "declined" });
 
     expect(state.currentWorkerId).toBe("worker-2");
     expect(state.timeline.filter((t) => t.message.includes("Maria declined"))).toHaveLength(1);
   });
 
-  it("should credit the worker who actually accepted", () => {
-    handleVoiceosCommand(command);
-    const state = handleVapiResult({ workerId: "worker-2", decision: "accepted" });
+  it("should credit the worker who actually accepted", async () => {
+    await handleVoiceosCommand(command);
+    const state = await handleVapiResult({ workerId: "worker-2", decision: "accepted" });
 
     expect(state.shift?.assignedWorkerId).toBe("worker-2");
     expect(state.currentWorkerId).toBe("worker-2");
     expect(state.currentWorkerIndex).toBe(1);
   });
 
-  it("should reject a malformed manager command", () => {
-    expect(() => handleVoiceosCommand({ role: "Kitchen Assistant" } as never)).toThrow(
+  it("should reject a malformed manager command", async () => {
+    await expect(handleVoiceosCommand({ role: "Kitchen Assistant" } as never)).rejects.toThrow(
       /Missing required shift fields/,
     );
-    expect(getWorkflowState().status).toBe("WAITING_FOR_MANAGER_COMMAND");
+    expect((await getWorkflowState()).status).toBe("WAITING_FOR_MANAGER_COMMAND");
   });
 });

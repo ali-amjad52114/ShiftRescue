@@ -4,7 +4,7 @@ import { publicWorkflowState, resetWorkflowState } from "@/lib/workflow/state";
 
 export async function POST() {
   return NextResponse.json({
-    ...publicWorkflowState(resetWorkflowState()),
+    ...publicWorkflowState(await resetWorkflowState()),
     message: "Workflow state reset",
   });
 }

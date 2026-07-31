@@ -1,7 +1,7 @@
 import { getWorkflowState, updateWorkflowState } from "./state";
-import type { Shift, WorkerDecision, WorkflowProof } from "./types";
+import type { Shift, WorkerDecision, WorkflowState } from "./types";
 
-function addTimelineEntry(state: ReturnType<typeof getWorkflowState>, message: string) {
+function addTimelineEntry(state: WorkflowState, message: string) {
   state.timeline.push({
     id: `evt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
     message,
@@ -11,7 +11,7 @@ function addTimelineEntry(state: ReturnType<typeof getWorkflowState>, message: s
 
 const REQUIRED_COMMAND_FIELDS = ["role", "date", "startTime", "endTime", "location"] as const;
 
-export function handleVoiceosCommand(payload: {
+export async function handleVoiceosCommand(payload: {
   role: string;
   date: string;
   startTime: string;
@@ -28,7 +28,7 @@ export function handleVoiceosCommand(payload: {
     throw new Error(`Missing required shift fields: ${missing.join(", ")}`);
   }
 
-  const state = getWorkflowState();
+  const state = await getWorkflowState();
 
   const shift: Shift = {
     id: `shift_${Date.now()}`,
@@ -60,11 +60,11 @@ export function handleVoiceosCommand(payload: {
   return updateWorkflowState(state);
 }
 
-export function handleVapiResult(payload: {
+export async function handleVapiResult(payload: {
   workerId: string;
   decision: WorkerDecision;
 }) {
-  const state = getWorkflowState();
+  const state = await getWorkflowState();
 
   // If already complete or worker accepted, ignore late calls
   if (state.status === "COMPLETE" || state.status === "WORKER_ACCEPTED" || state.status === "TRIGGERING_VOICEOS" || state.status === "VOICEOS_COMPLETE") {
@@ -120,14 +120,14 @@ export function handleVapiResult(payload: {
   return updateWorkflowState(state);
 }
 
-export function handleVoiceosResult(payload: {
+export async function handleVoiceosResult(payload: {
   success: boolean;
   scheduleUpdated?: boolean;
   calendarEventId?: string;
   slackMessageId?: string;
   smsMessageId?: string;
 }) {
-  const state = getWorkflowState();
+  const state = await getWorkflowState();
 
   if (payload.success) {
     // Record only what the integrations actually reported. This used to fall

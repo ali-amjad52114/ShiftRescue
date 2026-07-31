@@ -8,3 +8,4 @@ npm-debug.log*
 .env*.local
 .aidesigner/*
 !.aidesigner/.gitkeep
+.env*

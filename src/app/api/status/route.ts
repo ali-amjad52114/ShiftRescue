@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getWorkflowState, publicWorkflowState } from "@/lib/workflow/state";
 
 export async function GET() {
-  const state = getWorkflowState();
+  const state = await getWorkflowState();
   const currentWorker =
     state.currentWorkerIndex >= 0 && state.currentWorkerIndex < state.workers.length
       ? state.workers[state.currentWorkerIndex]
