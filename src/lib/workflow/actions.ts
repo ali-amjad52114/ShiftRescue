@@ -56,7 +56,8 @@ export async function dialCurrentWorker(state: WorkflowState): Promise<void> {
     const worker = state.workers[state.currentWorkerIndex];
     if (!worker) return;
 
-    const { role, location, pay, date, startTime, endTime } = state.shift;
+    const { role, location, pay, date, startTime, endTime, startsAt, endsAt, timeZone } = state.shift;
+    const zone = timeZone || DEFAULT_TIME_ZONE;
     const result = await startA1MobileCall({
       workerId: worker.id,
       workerName: worker.name,
@@ -67,9 +68,12 @@ export async function dialCurrentWorker(state: WorkflowState): Promise<void> {
         role,
         location,
         pay,
-        date: date ?? "",
-        startTime: startTime ?? "",
-        endTime: endTime ?? "",
+        // Shifts are stored as instants now, so the spoken forms are rendered
+        // from them. Passing the legacy fields raw sent empty strings and the
+        // assistant read the placeholders aloud: "the date is", "start time is".
+        date: date || (startsAt ? formatSpokenDate(startsAt, zone) : ""),
+        startTime: startTime || (startsAt ? formatSpokenTime(startsAt, zone) : ""),
+        endTime: endTime || (endsAt ? formatSpokenTime(endsAt, zone) : ""),
       },
     });
 
