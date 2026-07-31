@@ -5,7 +5,7 @@ import { ShiftCard } from "./ShiftCard";
 import { WorkerStatus } from "./WorkerStatus";
 import { WorkflowTimeline } from "./WorkflowTimeline";
 import { ProofPanel } from "./ProofPanel";
-import { WORKFLOW_STEPS, statusMeta } from "./status";
+import { WORKFLOW_STEPS, railStates, statusMeta } from "./status";
 
 interface StatusResponse {
   status: string;
@@ -16,6 +16,7 @@ interface StatusResponse {
     endTime: string;
     location: string;
     pay: string;
+    assignedWorkerId: string | null;
   } | null;
   currentWorker: string | null;
   language: string | null;
@@ -47,6 +48,7 @@ const SIDE_EFFECTS = ["scheduleUpdated", "calendarEventId", "slackMessageId", "s
 export function DashboardView() {
   const [data, setData] = useState<StatusResponse>(INITIAL);
   const [connected, setConnected] = useState(false);
+  const [confirmingReset, setConfirmingReset] = useState(false);
   const [resetting, setResetting] = useState(false);
 
   const fetchStatus = useCallback(async () => {
@@ -70,6 +72,7 @@ export function DashboardView() {
       console.error("Error resetting state:", e);
     } finally {
       setResetting(false);
+      setConfirmingReset(false);
     }
   };
 
@@ -79,7 +82,21 @@ export function DashboardView() {
     return () => clearInterval(interval);
   }, [fetchStatus]);
 
+  // Escape backs out of the reset confirmation, as any confirm prompt should.
+  useEffect(() => {
+    if (!confirmingReset) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setConfirmingReset(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [confirmingReset]);
+
   const meta = statusMeta(data.status);
+  const failed = meta.tone === "failed";
+  const hasAcceptance = Boolean(data.shift?.assignedWorkerId);
+  const steps = railStates(data.status, hasAcceptance);
+
   const workerCount = data.state?.workers?.length ?? 3;
   const workerIndex = data.state?.currentWorkerIndex ?? -1;
   const called = workerIndex >= 0 ? workerIndex + 1 : 0;
@@ -95,28 +112,58 @@ export function DashboardView() {
             A manager speaks once. ShiftRescue calls workers in their own language, gets a real answer, then
             updates the schedule, calendar and Slack — and shows the receipts.
           </p>
+          {/* Reset wipes a live demo run, so it is a two-step, non-primary action.
+              The accent only appears on the confirm, where it is the intended action. */}
           <div className="hero-actions">
-            <button className="btn btn-primary" onClick={handleReset} disabled={resetting}>
-              {resetting ? "Resetting…" : "Reset demo"}
-            </button>
-            <a className="btn btn-ghost" href="/api/status">
-              Raw status JSON
-            </a>
+            {confirmingReset ? (
+              <>
+                <button className="btn btn-primary" onClick={handleReset} disabled={resetting} autoFocus>
+                  {resetting ? "Resetting…" : "Yes, wipe this run"}
+                </button>
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => setConfirmingReset(false)}
+                  disabled={resetting}
+                >
+                  Cancel
+                </button>
+                <span className="hero-actions-note">This clears the timeline and every proof ID.</span>
+              </>
+            ) : (
+              <>
+                <button className="btn btn-ghost" onClick={() => setConfirmingReset(true)}>
+                  Reset demo
+                </button>
+                <a className="btn btn-ghost" href="/api/status">
+                  Raw status JSON
+                </a>
+              </>
+            )}
           </div>
         </div>
 
-        <aside className="stat-card" aria-label="Current workflow status">
+        <aside
+          className={`stat-card${failed ? " stat-card-failed" : ""}`}
+          aria-label="Current workflow status"
+        >
           <div className="card-head">
             <p className="eyebrow eyebrow-inverse">Current status</p>
-            <span className="live-pill">
+            <span className={`live-pill${connected ? "" : " live-pill-offline"}`}>
               <span className={`live-dot${connected ? "" : " live-dot-idle"}`} />
-              {connected ? "Live" : "Offline"}
+              {connected ? "Live" : "Reconnecting"}
             </span>
           </div>
           {/* Polled every 1.5s — announce changes rather than silently swapping text. */}
           <p className="stat-value" aria-live="polite">
             {meta.label}
           </p>
+          {failed && (
+            <p className="stat-alert">
+              {hasAcceptance
+                ? "A worker accepted, but the follow-up actions did not complete. The shift is not confirmed."
+                : "No worker accepted. The shift is still uncovered and nothing was scheduled."}
+            </p>
+          )}
           <dl className="mini-list">
             <div className="mini-row">
               <dt className="mini-label">Workers called</dt>
@@ -125,7 +172,7 @@ export function DashboardView() {
               </dd>
             </div>
             <div className="mini-row">
-              <dt className="mini-label">Language on the call</dt>
+              <dt className="mini-label">Call language</dt>
               <dd className="mini-value">{data.language ?? "—"}</dd>
             </div>
             <div className="mini-row">
@@ -141,18 +188,14 @@ export function DashboardView() {
       <section className="rail">
         <p className="eyebrow">Rescue sequence</p>
         <ol className="rail-steps">
-          {WORKFLOW_STEPS.map((label, index) => {
-            const stepState =
-              index < meta.step ? "done" : index === meta.step ? "active" : "pending";
-            return (
-              <li key={label} className={`rail-step rail-step-${stepState}`}>
-                <span className="rail-step-index">
-                  {String(index + 1).padStart(2, "0")} · {stepState}
-                </span>
-                <span className="rail-step-label">{label}</span>
-              </li>
-            );
-          })}
+          {WORKFLOW_STEPS.map((label, index) => (
+            <li key={label} className={`rail-step rail-step-${steps[index]}`}>
+              <span className="rail-step-index">
+                {String(index + 1).padStart(2, "0")} · {steps[index] === "pending" ? "not run" : steps[index]}
+              </span>
+              <span className="rail-step-label">{label}</span>
+            </li>
+          ))}
         </ol>
       </section>
 
@@ -162,6 +205,7 @@ export function DashboardView() {
           currentWorker={data.currentWorker}
           language={data.language}
           status={data.status}
+          hasAcceptance={hasAcceptance}
         />
         <WorkflowTimeline timeline={data.timeline} />
         <ProofPanel proof={data.proof ?? {}} />

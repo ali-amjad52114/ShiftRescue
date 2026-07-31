@@ -6,7 +6,9 @@ export const WORKFLOW_STEPS = [
   "Confirmation SMS",
 ] as const;
 
-type StatusTone = "idle" | "active" | "done" | "halted";
+type StatusTone = "idle" | "active" | "done" | "failed";
+
+export type StepState = "done" | "active" | "failed" | "pending";
 
 interface StatusMeta {
   label: string;
@@ -25,7 +27,7 @@ const STATUS_META: Record<string, StatusMeta> = {
   VOICEOS_COMPLETE: { label: "VoiceOS complete", tone: "active", step: 3 },
   SENDING_SMS: { label: "Sending SMS", tone: "active", step: 4 },
   COMPLETE: { label: "Rescue complete", tone: "done", step: 5 },
-  INCOMPLETE: { label: "Rescue incomplete", tone: "halted", step: 4 },
+  INCOMPLETE: { label: "Rescue incomplete", tone: "failed", step: 2 },
 };
 
 export function statusMeta(status: string): StatusMeta {
@@ -35,4 +37,30 @@ export function statusMeta(status: string): StatusMeta {
 export function statusTagClass(status: string): string {
   const { tone } = statusMeta(status);
   return tone === "idle" ? "status-tag" : `status-tag status-tag-${tone}`;
+}
+
+/**
+ * State of every step in the rail.
+ *
+ * A step is only ever "done" when it actually happened. A failed run must not
+ * render later steps as complete — the demo is scored on side effects that can
+ * be independently confirmed, so claiming an un-run step is a fabricated success.
+ *
+ * `hasAcceptance` distinguishes the two ways a run can fail: every worker
+ * declined (acceptance itself failed) versus VoiceOS failing after someone had
+ * already accepted.
+ */
+export function railStates(status: string, hasAcceptance: boolean): StepState[] {
+  const { step, tone } = statusMeta(status);
+
+  if (tone === "failed") {
+    const failedIndex = hasAcceptance ? 3 : 2;
+    return WORKFLOW_STEPS.map((_, index) =>
+      index < failedIndex ? "done" : index === failedIndex ? "failed" : "pending",
+    );
+  }
+
+  return WORKFLOW_STEPS.map((_, index) =>
+    index < step ? "done" : index === step ? "active" : "pending",
+  );
 }

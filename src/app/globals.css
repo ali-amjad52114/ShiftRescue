@@ -246,6 +246,12 @@ body {
   flex-wrap: wrap;
 }
 
+.hero-actions-note {
+  font-size: var(--text-body-sm);
+  line-height: var(--leading-body-sm);
+  color: var(--color-charcoal);
+}
+
 /* ---------------------------------------------------------------- Buttons */
 
 .btn {
@@ -315,6 +321,17 @@ body {
   animation: none;
 }
 
+/* Polling failed — the numbers on screen are stale, so say so loudly rather
+   than leaving a calm "Live" badge over frozen data. */
+.stat-card .live-pill-offline {
+  background: var(--color-ink-black);
+  color: var(--color-paper-white);
+}
+
+.live-pill-offline .live-dot-idle {
+  background: var(--color-paper-white);
+}
+
 @keyframes live-fade {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
@@ -338,6 +355,23 @@ body {
 
 .stat-card .live-pill {
   background: rgba(252, 252, 252, 0.1);
+  color: var(--color-paper-white);
+}
+
+/* A failed run must not look like a successful one. Ink Black is in the palette
+   and reads as a different state at a glance, without inventing an error hue. */
+.stat-card-failed {
+  background: var(--color-ink-black);
+}
+
+.stat-alert {
+  margin: 0;
+  padding: var(--spacing-12) var(--spacing-16);
+  border-radius: var(--radius-buttons);
+  background: rgba(252, 252, 252, 0.08);
+  border-left: 4px solid var(--color-chartreuse-lime);
+  font-size: var(--text-body-sm);
+  line-height: var(--leading-body-sm);
   color: var(--color-paper-white);
 }
 
@@ -413,11 +447,21 @@ body {
 .rail-step-done { border-top-color: var(--color-deep-forest); }
 .rail-step-active { border-top-color: var(--color-chartreuse-lime); }
 
+.rail-step-failed {
+  border-top-color: var(--color-ink-black);
+  border-top-width: 4px;
+}
+
 .rail-step-index {
   font-size: var(--text-caption);
   letter-spacing: var(--tracking-caption);
   text-transform: uppercase;
   color: var(--color-charcoal);
+}
+
+.rail-step-failed .rail-step-index {
+  color: var(--color-ink-black);
+  font-weight: var(--font-weight-semibold);
 }
 
 .rail-step-label {
@@ -505,10 +549,18 @@ body {
   color: var(--color-paper-white);
 }
 
-.status-tag-halted {
-  background: transparent;
-  color: var(--color-ink-black);
-  box-shadow: inset 0 0 0 1px var(--hairline-strong);
+.status-tag-failed {
+  background: var(--color-ink-black);
+  color: var(--color-paper-white);
+}
+
+.card-count {
+  flex: none;
+  font-size: var(--text-caption);
+  line-height: var(--leading-caption);
+  letter-spacing: var(--tracking-caption);
+  text-transform: uppercase;
+  color: var(--color-charcoal);
 }
 
 /* ------------------------------------------------------------ Detail rows */
@@ -552,12 +604,21 @@ body {
 
 /* --------------------------------------------------------------- Timeline */
 
+/* Capped so a long run cannot stretch the page; the list auto-scrolls to the
+   newest event unless the viewer has scrolled up to read an earlier one. */
 .timeline {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
+  max-height: 340px;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .timeline { scroll-behavior: auto; }
 }
 
 .timeline-item {
@@ -631,7 +692,7 @@ body {
   font-size: var(--text-body-sm);
   line-height: var(--leading-body-sm);
   color: var(--color-deep-forest);
-  word-break: break-all;
+  overflow-wrap: anywhere;
   text-align: right;
 }
 
@@ -698,6 +759,18 @@ body {
   }
 
   .detail-value {
+    text-align: left;
+  }
+
+  /* Side-by-side proof rows squeeze IDs into a mid-string wrap on narrow
+     screens. These IDs are the evidence — they must stay readable. */
+  .proof-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-4);
+  }
+
+  .proof-val {
     text-align: left;
   }
 }
