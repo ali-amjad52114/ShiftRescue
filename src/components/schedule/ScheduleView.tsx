@@ -492,12 +492,18 @@ export function ScheduleView() {
                       >
                         <span className="shift-block-time">{formatTime(shift.startsAt, timeZone)}</span>
                         <span className="shift-block-role">{shift.role}</span>
+                        {/* An unfilled block is solid ink among pale ones and is
+                            listed at the top of the page, so the word would be a
+                            third telling. It stays for screen readers, which get
+                            nothing from the colour. */}
                         <span className="shift-block-person">
-                          {person
-                            ? person.name
-                            : isFilling
-                              ? `Calling ${(rescue.callingName ?? "").split(" ")[0] || "…"}`
-                              : "Unfilled"}
+                          {person ? (
+                            person.name
+                          ) : isFilling ? (
+                            `Calling ${(rescue.callingName ?? "").split(" ")[0] || "…"}`
+                          ) : (
+                            <span className="visually-hidden">Unfilled</span>
+                          )}
                         </span>
                       </button>
                     );
