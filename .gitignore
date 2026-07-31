@@ -17,3 +17,4 @@ campaign-template.csv
 # so keep the rule here rather than in .git/info/exclude, which is never cloned.
 ARCHITECTURE.md
 SWAYAM-WORK.md
+.playwright-mcp/

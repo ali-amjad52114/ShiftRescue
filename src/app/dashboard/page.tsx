@@ -1,5 +1,6 @@
-import { DashboardView } from "@/components/dashboard/DashboardView";
+import { redirect } from "next/navigation";
 
+/** The old workflow dashboard now lives at /admin; the schedule is the product. */
 export default function DashboardPage() {
-  return <DashboardView />;
+  redirect("/admin");
 }

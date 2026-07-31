@@ -10,9 +10,9 @@ const EMPLOYEES_KEY = "shiftrescue:employees";
  */
 function seedRoster(): Employee[] {
   return [
-    { id: "emp_maria", name: "Maria Alvarez", phone: process.env.DEMO_WORKER_1_PHONE || "", language: "Spanish", role: "Kitchen Assistant", active: true },
-    { id: "emp_ahmed", name: "Ahmed Khan", phone: process.env.DEMO_WORKER_2_PHONE || "", language: "Urdu", role: "Kitchen Assistant", active: true },
-    { id: "emp_john", name: "John Byrne", phone: process.env.DEMO_WORKER_3_PHONE || "", language: "English", role: "Kitchen Assistant", active: true },
+    { id: "worker-1", name: "Maria Alvarez", phone: process.env.DEMO_WORKER_1_PHONE || "", language: "Spanish", role: "Kitchen Assistant", active: true },
+    { id: "worker-2", name: "Ahmed Khan", phone: process.env.DEMO_WORKER_2_PHONE || "", language: "Urdu", role: "Kitchen Assistant", active: true },
+    { id: "worker-3", name: "John Byrne", phone: process.env.DEMO_WORKER_3_PHONE || "", language: "English", role: "Kitchen Assistant", active: true },
   ];
 }
 
@@ -44,9 +44,16 @@ async function saveEmployees(employees: Employee[]): Promise<Employee[]> {
   return employees;
 }
 
-/** Employees who can be called for a shift, in call order. */
+/**
+ * Employees the workflow will work through, in call order.
+ *
+ * Deliberately not filtered by phone number: someone with no number on file is
+ * still on the roster, and the call layer reports that honestly when it reaches
+ * them. Filtering here made a freshly seeded environment look like it had no
+ * staff at all.
+ */
 export async function callableEmployees(): Promise<Employee[]> {
-  return (await listEmployees()).filter((e) => e.active && e.phone.trim() !== "");
+  return (await listEmployees()).filter((e) => e.active);
 }
 
 export interface EmployeeInput {
