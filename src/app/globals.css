@@ -1600,3 +1600,42 @@ body {
   padding: var(--spacing-56) var(--spacing-24);
   text-align: center;
 }
+
+
+/* ------------------------------------------------------- Review round two */
+
+/* The dock is sticky, so it floated over the 17:00 row and hid real shifts.
+   Reserve its height at the bottom of the page while it is on screen. */
+.page:has(.dock) {
+  padding-bottom: var(--spacing-100);
+}
+
+/* Role identity belongs in the accent, not the fill. Filling every covered
+   shift with a saturated colour made the calendar a wall of green again and
+   buried the one shift that needs attention. */
+.shift-block-role-kitchen.shift-block-covered,
+.shift-block-role-server.shift-block-covered,
+.shift-block-role-bartender.shift-block-covered,
+.shift-block-role-manager.shift-block-covered,
+.shift-block-role-default.shift-block-covered {
+  background: var(--color-pale-sage);
+  color: var(--color-deep-forest);
+}
+
+.shift-block-role-kitchen.shift-block-covered { border-left: 3px solid var(--color-deep-forest); }
+.shift-block-role-server.shift-block-covered { border-left: 3px solid var(--color-forest-mid); }
+.shift-block-role-bartender.shift-block-covered { border-left: 3px solid var(--color-vivid-green); }
+.shift-block-role-manager.shift-block-covered { border-left: 3px solid var(--color-charcoal); }
+.shift-block-role-default.shift-block-covered { border-left: 3px solid var(--color-charcoal); }
+
+/* An unfilled shift outranks every role colour. */
+.shift-block-open,
+.shift-block-role-kitchen.shift-block-open,
+.shift-block-role-server.shift-block-open,
+.shift-block-role-bartender.shift-block-open,
+.shift-block-role-manager.shift-block-open,
+.shift-block-role-default.shift-block-open {
+  background: var(--color-ink-black);
+  color: var(--color-paper-white);
+  border-left: 3px solid var(--color-chartreuse-lime);
+}

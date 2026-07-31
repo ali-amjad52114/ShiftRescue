@@ -267,6 +267,11 @@ export function ScheduleView() {
               ))}
             </select>
           </label>
+          {!data.canManage && (
+            <a className="btn btn-primary btn-sm" href="/login">
+              Sign in to manage
+            </a>
+          )}
           <button className="btn btn-ghost btn-sm" onClick={() => setWeekOffset((w) => w - 1)} aria-label="Previous week">
             ‹
           </button>

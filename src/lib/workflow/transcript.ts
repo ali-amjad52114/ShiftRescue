@@ -24,6 +24,10 @@ export async function appendTranscriptLine(input: {
 
   const state = await getWorkflowState();
 
+  // No call in progress means this line belongs to nothing on screen. Storing
+  // it would surface a stray utterance inside the next call's conversation.
+  if (!state.currentWorkerId) return state;
+
   // A line arriving for a worker who is no longer on the phone belongs to a
   // finished call and must not be shown against the current one.
   if (input.workerId && state.currentWorkerId && input.workerId !== state.currentWorkerId) {
