@@ -5,6 +5,6 @@ import { publicWorkflowState, resetWorkflowState } from "@/lib/workflow/state";
 export async function POST() {
   return NextResponse.json({
     ...publicWorkflowState(resetWorkflowState()),
-    message: "mock reset response",
+    message: "Workflow state reset",
   });
 }

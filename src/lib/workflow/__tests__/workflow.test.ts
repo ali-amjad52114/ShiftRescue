@@ -122,4 +122,69 @@ describe("Workflow Orchestrator Engine", () => {
     expect(state.proof.slackMessageId).toBe("slack_proof_99");
     expect(state.proof.smsMessageId).toBe("sms_proof_99");
   });
+
+  const command = {
+    role: "Kitchen Assistant",
+    date: "July 31",
+    startTime: "6:00 PM",
+    endTime: "10:00 PM",
+    location: "Downtown San Francisco",
+  };
+
+  it("should never invent proof IDs when VoiceOS reports success without them", () => {
+    handleVoiceosCommand(command);
+    handleVapiResult({ workerId: "worker-1", decision: "accepted" });
+
+    const state = handleVoiceosResult({ success: true });
+
+    expect(state.proof.calendarEventId).toBeUndefined();
+    expect(state.proof.slackMessageId).toBeUndefined();
+    expect(state.proof.smsMessageId).toBeUndefined();
+    expect(state.proof.scheduleUpdated).toBeUndefined();
+    // Nothing was confirmed, so the run must not claim to be complete.
+    expect(state.status).not.toBe("COMPLETE");
+  });
+
+  it("should not claim the SMS was sent without a message ID", () => {
+    handleVoiceosCommand(command);
+    handleVapiResult({ workerId: "worker-1", decision: "accepted" });
+
+    const state = handleVoiceosResult({
+      success: true,
+      scheduleUpdated: true,
+      calendarEventId: "cal_1",
+      slackMessageId: "slack_1",
+    });
+
+    expect(state.status).toBe("SENDING_SMS");
+    expect(state.proof.smsMessageId).toBeUndefined();
+    expect(state.timeline.some((t) => t.message.includes("Rescue complete"))).toBe(false);
+  });
+
+  it("should ignore a duplicate decline from a worker who is no longer being called", () => {
+    handleVoiceosCommand(command);
+    handleVapiResult({ workerId: "worker-1", decision: "declined" });
+
+    // Retried webhook for worker-1 while worker-2 is on the phone.
+    const state = handleVapiResult({ workerId: "worker-1", decision: "declined" });
+
+    expect(state.currentWorkerId).toBe("worker-2");
+    expect(state.timeline.filter((t) => t.message.includes("Maria declined"))).toHaveLength(1);
+  });
+
+  it("should credit the worker who actually accepted", () => {
+    handleVoiceosCommand(command);
+    const state = handleVapiResult({ workerId: "worker-2", decision: "accepted" });
+
+    expect(state.shift?.assignedWorkerId).toBe("worker-2");
+    expect(state.currentWorkerId).toBe("worker-2");
+    expect(state.currentWorkerIndex).toBe(1);
+  });
+
+  it("should reject a malformed manager command", () => {
+    expect(() => handleVoiceosCommand({ role: "Kitchen Assistant" } as never)).toThrow(
+      /Missing required shift fields/,
+    );
+    expect(getWorkflowState().status).toBe("WAITING_FOR_MANAGER_COMMAND");
+  });
 });

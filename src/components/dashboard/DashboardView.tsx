@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ShiftCard } from "./ShiftCard";
 import { WorkerStatus } from "./WorkerStatus";
 import { WorkflowTimeline } from "./WorkflowTimeline";
@@ -51,12 +51,27 @@ export function DashboardView() {
   const [confirmingReset, setConfirmingReset] = useState(false);
   const [resetting, setResetting] = useState(false);
 
+  /**
+   * Workflow state lives in memory, and Vercel serves requests from several
+   * function instances — so a poll can land on an instance that never saw the
+   * run and answers with an empty workflow. Keep the furthest-along state the
+   * backend has actually reported instead of flickering back to "waiting".
+   *
+   * This never invents progress: it only holds on to events the backend really
+   * sent. A reset clears the mark so a genuinely empty run displays.
+   */
+  const seenEvents = useRef(-1);
+
   const fetchStatus = useCallback(async () => {
     try {
       const res = await fetch("/api/status");
       if (!res.ok) throw new Error(`status ${res.status}`);
-      setData(await res.json());
+      const json: StatusResponse = await res.json();
       setConnected(true);
+      if (json.timeline.length >= seenEvents.current) {
+        seenEvents.current = json.timeline.length;
+        setData(json);
+      }
     } catch (e) {
       setConnected(false);
       console.error("Error fetching status:", e);
@@ -67,7 +82,11 @@ export function DashboardView() {
     setResetting(true);
     try {
       const res = await fetch("/api/reset", { method: "POST" });
-      if (res.ok) await fetchStatus();
+      // An intentional reset is the one case where going backwards is correct.
+      if (res.ok) {
+        seenEvents.current = -1;
+        await fetchStatus();
+      }
     } catch (e) {
       console.error("Error resetting state:", e);
     } finally {
