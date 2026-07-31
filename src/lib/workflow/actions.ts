@@ -361,6 +361,14 @@ export async function handleVoiceosResult(payload: {
   const state = await getWorkflowState();
 
   if (payload.success) {
+    // Completion means "this shift is now covered". Without an acceptance
+    // there is nobody to cover it, and recording proof would claim the
+    // schedule, Calendar, Slack, Gmail and Sheets were updated for an empty
+    // shift — a fabricated success.
+    if (!state.shift?.assignedWorkerId) {
+      throw new Error("Cannot complete a rescue before a worker has accepted the shift");
+    }
+
     // A successful result must include proof from every VoiceOS side effect.
     // Never fall back to invented IDs or silently accept partial completion.
     if (!payload.scheduleUpdated) {

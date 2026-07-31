@@ -10,6 +10,7 @@ interface Status {
   shift: { id: string; role: string; assignedWorkerId: string | null } | null;
   currentWorker: string | null;
   workerId: string | null;
+  attemptId: string | null;
   language: string | null;
   timeline: Array<{ id: string; message: string; timestamp: string }>;
   proof: Record<string, unknown>;
@@ -133,14 +134,14 @@ export function AdminConsole() {
           <button
             className="btn btn-ghost"
             disabled={busy || !data.workerId}
-            onClick={() => post("/api/vapi-result", { workerId: data.workerId, decision: "declined" })}
+            onClick={() => post("/api/vapi-result", { workerId: data.workerId, attemptId: data.attemptId, decision: "declined" })}
           >
             Worker declined
           </button>
           <button
             className="btn btn-ghost"
             disabled={busy || !data.workerId}
-            onClick={() => post("/api/vapi-result", { workerId: data.workerId, decision: "accepted" })}
+            onClick={() => post("/api/vapi-result", { workerId: data.workerId, attemptId: data.attemptId, decision: "accepted" })}
           >
             Worker accepted
           </button>

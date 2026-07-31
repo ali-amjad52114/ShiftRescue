@@ -38,6 +38,14 @@ interface Rescue {
   timeline: Array<{ id: string; message: string; timestamp: string }>;
   transcript: Array<{ id: string; speaker: "agent" | "worker"; text: string; timestamp: string }>;
   confirmedBySms: boolean;
+  completed?: {
+    schedule: boolean;
+    calendar: boolean;
+    slack: boolean;
+    email: boolean;
+    sheet: boolean;
+    sms: boolean;
+  };
 }
 
 interface Schedule {
@@ -404,6 +412,8 @@ export function ScheduleView() {
             </div>
 
             <div className="live-column live-column-narrow">
+              <p className="live-column-label">Updated</p>
+              <CompletedChips completed={rescue.completed} tone="dark" />
               <p className="live-column-label">Activity</p>
               <ul className="live-feed">
                 {rescue.timeline.slice(-6).map((entry, index, all) => (
@@ -546,6 +556,35 @@ export function ScheduleView() {
         />
       )}
     </main>
+  );
+}
+
+/** The connected apps the rescue updates, in the order they happen. */
+const SIDE_EFFECTS = [
+  { key: "schedule", label: "Schedule" },
+  { key: "calendar", label: "Calendar" },
+  { key: "slack", label: "Slack" },
+  { key: "email", label: "Email" },
+  { key: "sheet", label: "Sheet" },
+  { key: "sms", label: "Text" },
+] as const;
+
+/** Chips for each app, shown only once that app has actually confirmed. */
+function CompletedChips({ completed, tone }: { completed: Rescue["completed"]; tone: "dark" | "light" }) {
+  if (!completed) return null;
+  const done = SIDE_EFFECTS.filter((e) => completed[e.key]);
+  if (done.length === 0) return null;
+  return (
+    <ul className={`chips chips-${tone}`}>
+      {done.map((e) => (
+        <li key={e.key} className="chip">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="m5 13 4 4 10-10" />
+          </svg>
+          {e.label}
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -720,10 +759,12 @@ function ShiftDetail({
             )}
           </span>
         </div>
-        {person && rescue.shiftId === shift.id && rescue.confirmedBySms && (
+        {person && rescue.shiftId === shift.id && rescue.completed && (
           <div className="detail-row">
-            <span className="detail-label">Confirmation</span>
-            <span className="detail-value">Text message sent</span>
+            <span className="detail-label">Confirmed in</span>
+            <span className="detail-value">
+              <CompletedChips completed={rescue.completed} tone="light" />
+            </span>
           </div>
         )}
       </div>

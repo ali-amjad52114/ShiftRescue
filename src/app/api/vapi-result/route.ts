@@ -3,6 +3,18 @@ import { handleVapiCallEnded, handleVapiResult } from "@/lib/workflow/actions";
 import { publicWorkflowState } from "@/lib/workflow/state";
 import { handleVapiWebhook, isVapiToolCallPayload } from "@/integrations/vapi";
 import { appendTranscriptLine } from "@/lib/workflow/transcript";
+import { syncScheduleAssignment } from "@/lib/workflow/coverage";
+
+/**
+ * Record the decision, then mirror an acceptance onto the schedule so the gap
+ * actually closes on the calendar. Without this the workflow knew who had
+ * accepted but the shift stayed unfilled on screen.
+ */
+async function recordDecision(payload: Parameters<typeof handleVapiResult>[0]) {
+  const state = await handleVapiResult(payload);
+  await syncScheduleAssignment(state);
+  return state;
+}
 
 export async function POST(req: Request) {
   try {
@@ -29,13 +41,13 @@ export async function POST(req: Request) {
     // Plain { workerId, decision } bodies come from the demo controls.
     if (isVapiToolCallPayload(body)) {
       const { status, body: reply } = await handleVapiWebhook(body, {
-        onDecision: handleVapiResult,
+        onDecision: recordDecision,
         onCallEnded: handleVapiCallEnded,
       });
       return NextResponse.json(reply, { status });
     }
 
-    const state = await handleVapiResult(body);
+    const state = await recordDecision(body);
     return NextResponse.json({
       success: true,
       status: state.status,

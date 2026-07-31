@@ -13,6 +13,7 @@ export async function GET() {
     shift: state.shift,
     currentWorker: currentWorker ? currentWorker.name : null,
     workerId: currentWorker ? currentWorker.id : null,
+    attemptId: state.activeAttemptId ?? null,
     language: currentWorker ? currentWorker.language : null,
     timeline: state.timeline,
     proof: state.proof,

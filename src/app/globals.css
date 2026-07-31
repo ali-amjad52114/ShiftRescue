@@ -1659,3 +1659,38 @@ body {
   font-size: var(--text-subheading);
   color: var(--color-deep-forest);
 }
+
+/* ---------------------------------------------- Connected-app confirmations */
+
+/* Each chip appears only once that app has actually confirmed, so the row
+   fills in as the rescue completes rather than pre-announcing work. */
+.chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-8);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-4);
+  font-size: var(--text-caption);
+  letter-spacing: var(--tracking-caption);
+  text-transform: uppercase;
+  border-radius: var(--radius-tags);
+  padding: 2px var(--spacing-8);
+  white-space: nowrap;
+}
+
+.chips-dark .chip {
+  background: rgba(200, 241, 105, 0.16);
+  color: var(--color-chartreuse-lime);
+}
+
+.chips-light .chip {
+  background: var(--color-pale-sage);
+  color: var(--color-deep-forest);
+}

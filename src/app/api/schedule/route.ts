@@ -44,6 +44,16 @@ export async function GET() {
       timeline: state.timeline,
       transcript: state.transcript ?? [],
       confirmedBySms: Boolean(state.proof.smsMessageId),
+      // What the connected apps actually confirmed. Booleans only: the IDs
+      // themselves are operator detail and stay in the admin console.
+      completed: {
+        schedule: Boolean(state.proof.scheduleUpdated),
+        calendar: Boolean(state.proof.calendarEventId),
+        slack: Boolean(state.proof.slackMessageId),
+        email: Boolean(state.proof.gmailMessageId),
+        sheet: Boolean(state.proof.spreadsheetId),
+        sms: Boolean(state.proof.smsMessageId),
+      },
     },
   });
 }
