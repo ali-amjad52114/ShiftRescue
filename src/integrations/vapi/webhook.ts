@@ -1,4 +1,5 @@
 import type {
+  VapiCallEnded,
   VapiDecisionResult,
   VapiToolCallResponse,
   VapiToolCallWebhook,
@@ -78,27 +79,66 @@ export function isVapiToolCallPayload(payload: unknown): payload is VapiToolCall
 }
 
 /**
+ * Vapi's end-of-call report. It arrives for every call, including the ones
+ * where nobody picked up and no tool was ever called — which is the only
+ * signal the backend gets that a worker is not going to answer.
+ */
+export function parseVapiCallEnded(payload: VapiToolCallWebhook): VapiCallEnded | null {
+  const message = payload?.message;
+  if (message?.type !== "end-of-call-report") return null;
+
+  return {
+    callId: message.call?.id,
+    endedReason: message.endedReason,
+  };
+}
+
+/**
  * Applies one decision to the backend. The route passes in the workflow
  * reducer directly, so no HTTP hop back into our own API is needed.
  */
 export type DecisionDeliverer = (result: VapiDecisionResult) => unknown;
 
+/** Told when a call finished, so a worker who never answered cannot stall the run. */
+export type CallEndedHandler = (event: VapiCallEnded) => unknown;
+
+export interface VapiWebhookHandlers {
+  onDecision: DecisionDeliverer;
+  onCallEnded?: CallEndedHandler;
+}
+
 /**
- * Full webhook handler: parse the tool call, apply the decision via `deliver`,
- * and return the reply body Vapi expects so the assistant can close the call.
+ * Full webhook handler. A tool call carries a decision and gets the reply Vapi
+ * needs to close the call politely; an end-of-call report is passed on so the
+ * workflow can move to the next worker when no decision ever came. Everything
+ * else Vapi sends (speech, transcripts, status) is acknowledged and ignored.
  */
 export async function handleVapiWebhook(
   payload: VapiToolCallWebhook,
-  deliver: DecisionDeliverer
+  handlers: VapiWebhookHandlers
 ): Promise<{ status: number; body: unknown }> {
   const parsed = parseVapiToolCall(payload);
 
   if (!parsed) {
+    const ended = parseVapiCallEnded(payload);
+    if (ended && handlers.onCallEnded) {
+      try {
+        await handlers.onCallEnded(ended);
+      } catch (error) {
+        return {
+          status: 502,
+          body: {
+            success: false,
+            error: error instanceof Error ? error.message : "Failed to record call end",
+          },
+        };
+      }
+    }
     return { status: 200, body: { received: true } };
   }
 
   try {
-    await deliver(parsed.result);
+    await handlers.onDecision(parsed.result);
   } catch (error) {
     return {
       status: 502,

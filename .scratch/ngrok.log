@@ -1,0 +1,36 @@
+t=2026-07-31T14:41:24-0700 lvl=info msg="no configuration paths supplied"
+t=2026-07-31T14:41:24-0700 lvl=info msg="using configuration at default config path" path=C:\\Users\\aaqui\\AppData\\Local\\ngrok\\ngrok.yml
+t=2026-07-31T14:41:24-0700 lvl=info msg="open config file" path=C:\\Users\\aaqui\\AppData\\Local\\ngrok\\ngrok.yml err=nil
+t=2026-07-31T14:41:24-0700 lvl=info msg="FIPS 140 mode" enabled=false
+t=2026-07-31T14:41:24-0700 lvl=info msg="starting web service" obj=web addr=127.0.0.1:4040 allow_hosts=[]
+t=2026-07-31T14:41:24-0700 lvl=info msg="client session established" obj=tunnels.session
+t=2026-07-31T14:41:24-0700 lvl=info msg="tunnel session started" obj=tunnels.session
+t=2026-07-31T14:41:24-0700 lvl=info msg="update available" obj=updater
+t=2026-07-31T14:41:24-0700 lvl=info msg="started tunnel" obj=tunnels name=command_line addr=http://localhost:3000 url=https://remold-mutiny-pagan.ngrok-free.dev
+t=2026-07-31T14:41:31-0700 lvl=info msg=start pg=/api/tunnels id=72b9f8cdeb4d9083
+t=2026-07-31T14:41:31-0700 lvl=info msg=end pg=/api/tunnels id=72b9f8cdeb4d9083 status=200 dur=0s
+t=2026-07-31T14:41:31-0700 lvl=info msg=start pg=/api/tunnels id=0bcb726d75b6a74b
+t=2026-07-31T14:41:31-0700 lvl=info msg=end pg=/api/tunnels id=0bcb726d75b6a74b status=200 dur=0s
+t=2026-07-31T14:41:31-0700 lvl=info msg="join connections" obj=join id=01157259988d l=[::1]:3000 r=148.64.100.237:59979
+t=2026-07-31T14:42:31-0700 lvl=info msg="join connections" obj=join id=b80d581c4cbe l=[::1]:3000 r=44.244.203.11:50438
+t=2026-07-31T14:42:31-0700 lvl=info msg="join connections" obj=join id=3fce4ccda751 l=[::1]:3000 r=44.244.203.11:45888
+t=2026-07-31T14:42:42-0700 lvl=info msg="join connections" obj=join id=85af5e2acba6 l=[::1]:3000 r=44.244.203.11:38544
+t=2026-07-31T14:42:43-0700 lvl=info msg="join connections" obj=join id=ac51a2ae9ea1 l=[::1]:3000 r=44.244.203.11:58658
+t=2026-07-31T14:43:00-0700 lvl=info msg=start pg=/api/requests/http id=7a2109ab33a4cca3
+t=2026-07-31T14:43:00-0700 lvl=info msg=end pg=/api/requests/http id=7a2109ab33a4cca3 status=200 dur=1.0158ms
+t=2026-07-31T14:43:08-0700 lvl=info msg="join connections" obj=join id=fcc0b427dc73 l=[::1]:3000 r=44.244.203.11:37044
+t=2026-07-31T14:43:11-0700 lvl=info msg=start pg=/api/requests/http id=e2a46abd98513a7a
+t=2026-07-31T14:43:11-0700 lvl=info msg=end pg=/api/requests/http id=e2a46abd98513a7a status=200 dur=1.0155ms
+t=2026-07-31T14:43:16-0700 lvl=info msg="join connections" obj=join id=9db5db17868a l=[::1]:3000 r=44.244.203.11:34366
+t=2026-07-31T14:43:37-0700 lvl=info msg=start pg=/api/requests/http id=2cfb9cd40485dc5f
+t=2026-07-31T14:43:37-0700 lvl=info msg=end pg=/api/requests/http id=2cfb9cd40485dc5f status=200 dur=3.0472ms
+t=2026-07-31T14:45:15-0700 lvl=info msg=start pg=/api/requests/http id=d510687fdbb2db7b
+t=2026-07-31T14:45:15-0700 lvl=info msg=end pg=/api/requests/http id=d510687fdbb2db7b status=200 dur=1.5457ms
+t=2026-07-31T14:49:36-0700 lvl=info msg="join connections" obj=join id=beebae3d638d l=[::1]:3000 r=148.64.100.237:54671
+t=2026-07-31T14:51:34-0700 lvl=info msg="join connections" obj=join id=8aa39abda794 l=[::1]:3000 r=54.214.150.2:50402
+t=2026-07-31T14:54:36-0700 lvl=info msg=start pg=/api/requests/http id=bf1d0ceaa096b1c9
+t=2026-07-31T14:54:36-0700 lvl=info msg=end pg=/api/requests/http id=bf1d0ceaa096b1c9 status=200 dur=2.6294ms
+t=2026-07-31T14:55:01-0700 lvl=info msg=start pg=/api/requests/http id=ec7957a6eba67994
+t=2026-07-31T14:55:01-0700 lvl=info msg=end pg=/api/requests/http id=ec7957a6eba67994 status=200 dur=1.0619ms
+t=2026-07-31T14:55:28-0700 lvl=info msg=start pg=/api/requests/http id=b84566afcbd713d5
+t=2026-07-31T14:55:28-0700 lvl=info msg=end pg=/api/requests/http id=b84566afcbd713d5 status=200 dur=2.746ms

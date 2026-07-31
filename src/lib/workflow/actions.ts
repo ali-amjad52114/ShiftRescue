@@ -1,4 +1,5 @@
 import { sendShiftConfirmationSms } from "../../integrations/a1mobile/client";
+import { classifyEndedReason } from "../../integrations/a1mobile/status";
 import { startVapiShiftCall } from "../../integrations/vapi";
 import {
   DEFAULT_TIME_ZONE,
@@ -219,7 +220,52 @@ export async function handleVapiResult(payload: {
     state.status = "TRIGGERING_VOICEOS";
     addTimelineEntry(state, `Triggering VoiceOS to update Schedule, Calendar, and Slack`);
   } else if (payload.decision === "needs_clarification") {
+    // Not a yes. The shift still needs covering, so the queue moves on rather
+    // than parking the run on someone who could not decide.
     addTimelineEntry(state, `Call with ${workerName} required clarification`);
+
+    if (advanceToNextWorker(state)) {
+      await dialCurrentWorker(state);
+    }
+  }
+
+  return updateWorkflowState(state);
+}
+
+/**
+ * A call finished. If it ended while we were still waiting on this worker, no
+ * decision was ever made — they did not pick up, it went to voicemail, or they
+ * hung up mid sentence — so the rescue moves to the next person. Without this
+ * the run waits forever for a decision that is never coming.
+ */
+export async function handleVapiCallEnded(event: {
+  callId?: string;
+  endedReason?: string;
+}) {
+  const state = await getWorkflowState();
+
+  // A decision already moved the run on, so this report is just the call
+  // hanging up afterwards.
+  if (state.status !== "CALLING_WORKER") return state;
+
+  // A late report from an earlier attempt must not skip the worker now ringing.
+  if (event.callId && state.proof.callId && event.callId !== state.proof.callId) {
+    return state;
+  }
+
+  const worker = state.workers[state.currentWorkerIndex];
+  const workerName = worker ? worker.name : "the worker";
+  const outcome = classifyEndedReason(event.endedReason, "ended");
+
+  addTimelineEntry(
+    state,
+    outcome === "no-answer"
+      ? `${workerName} did not answer`
+      : `Call with ${workerName} ended without a decision (${event.endedReason || "unknown"})`,
+  );
+
+  if (advanceToNextWorker(state)) {
+    await dialCurrentWorker(state);
   }
 
   return updateWorkflowState(state);

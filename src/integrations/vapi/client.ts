@@ -16,6 +16,8 @@ import type {
   StartVapiShiftCallResult,
 } from "./types";
 
+let mockCallCounter = 0;
+
 /**
  * Turns backend worker + shift data into the only facts the assistant may speak.
  *
@@ -55,7 +57,10 @@ export async function startVapiShiftCall(
   const apiKey = process.env.VAPI_API_KEY;
 
   if (!apiKey || !process.env.VAPI_ASSISTANT_ID || !vapiPhoneNumberId) {
-    return { success: true, callId: "mock-vapi-call-id" };
+    // Unique per attempt, like the real thing: the workflow tells attempts apart
+    // by call id, so a shared constant would let one call's end-of-call report
+    // be mistaken for another's.
+    return { success: true, callId: `mock-vapi-call-${Date.now()}-${mockCallCounter++}` };
   }
 
   if (!input.phone) {

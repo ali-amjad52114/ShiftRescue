@@ -4,6 +4,7 @@ import { resetEmployees } from "../../employees/store";
 import {
   handleVoiceosCommand,
   handleVapiResult,
+  handleVapiCallEnded,
   handleVoiceosResult,
 } from "../actions";
 
@@ -281,6 +282,93 @@ describe("Workflow Orchestrator Engine", () => {
     expect(state.status).toBe("INCOMPLETE");
     expect(state.currentWorkerId).toBeNull();
     expect(state.timeline.at(-1)?.message).toContain("All workers declined");
+  });
+
+  it("should keep calling down the list until someone accepts", async () => {
+    await handleVoiceosCommand(command);
+    expect((await getWorkflowState()).currentWorkerId).toBe("emp_maria");
+
+    await handleVapiResult({ workerId: "emp_maria", decision: "declined" });
+    expect((await getWorkflowState()).currentWorkerId).toBe("emp_ahmed");
+
+    const state = await handleVapiResult({ workerId: "emp_ahmed", decision: "accepted" });
+    expect(state.status).toBe("TRIGGERING_VOICEOS");
+    expect(state.shift?.assignedWorkerId).toBe("emp_ahmed");
+  });
+
+  it("should move on when a worker never answers", async () => {
+    const started = await handleVoiceosCommand(command);
+
+    const state = await handleVapiCallEnded({
+      callId: started.proof.callId,
+      endedReason: "customer-did-not-answer",
+    });
+
+    expect(state.status).toBe("CALLING_WORKER");
+    expect(state.currentWorkerId).toBe("emp_ahmed");
+    expect(state.timeline.some((t) => t.message.includes("Maria Alvarez did not answer"))).toBe(true);
+  });
+
+  it("should move on when the call ends with no decision", async () => {
+    const started = await handleVoiceosCommand(command);
+
+    const state = await handleVapiCallEnded({
+      callId: started.proof.callId,
+      endedReason: "silence-timed-out",
+    });
+
+    expect(state.currentWorkerId).toBe("emp_ahmed");
+    expect(state.timeline.some((t) => t.message.includes("without a decision"))).toBe(true);
+  });
+
+  it("should move on when a worker cannot decide", async () => {
+    await handleVoiceosCommand(command);
+
+    const state = await handleVapiResult({
+      workerId: "emp_maria",
+      decision: "needs_clarification",
+    });
+
+    expect(state.status).toBe("CALLING_WORKER");
+    expect(state.currentWorkerId).toBe("emp_ahmed");
+  });
+
+  it("should ignore an end-of-call report once a decision already advanced the run", async () => {
+    const started = await handleVoiceosCommand(command);
+    await handleVapiResult({ workerId: "emp_maria", decision: "declined" });
+
+    // Maria's call hangs up after her decline. Ahmed is now ringing and must
+    // not be skipped by the tail end of the previous call.
+    const state = await handleVapiCallEnded({
+      callId: started.proof.callId,
+      endedReason: "customer-ended-call",
+    });
+
+    expect(state.currentWorkerId).toBe("emp_ahmed");
+  });
+
+  it("should not let a stale call report skip the worker now ringing", async () => {
+    await handleVoiceosCommand(command);
+
+    const state = await handleVapiCallEnded({
+      callId: "some-older-call-id",
+      endedReason: "customer-did-not-answer",
+    });
+
+    expect(state.currentWorkerId).toBe("emp_maria");
+  });
+
+  it("should end INCOMPLETE when nobody down the list answers", async () => {
+    let state = await handleVoiceosCommand(command);
+    for (let i = 0; i < 3; i++) {
+      state = await handleVapiCallEnded({
+        callId: state.proof.callId,
+        endedReason: "customer-did-not-answer",
+      });
+    }
+
+    expect(state.status).toBe("INCOMPLETE");
+    expect(state.currentWorkerId).toBeNull();
   });
 
   it("should reject a malformed manager command", async () => {

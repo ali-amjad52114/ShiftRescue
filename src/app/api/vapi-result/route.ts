@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleVapiResult } from "@/lib/workflow/actions";
+import { handleVapiCallEnded, handleVapiResult } from "@/lib/workflow/actions";
 import { publicWorkflowState } from "@/lib/workflow/state";
 import { handleVapiWebhook, isVapiToolCallPayload } from "@/integrations/vapi";
 
@@ -11,7 +11,10 @@ export async function POST(req: Request) {
     // expect a toolCallId-keyed reply so the assistant can close the call.
     // Plain { workerId, decision } bodies come from the demo controls.
     if (isVapiToolCallPayload(body)) {
-      const { status, body: reply } = await handleVapiWebhook(body, handleVapiResult);
+      const { status, body: reply } = await handleVapiWebhook(body, {
+        onDecision: handleVapiResult,
+        onCallEnded: handleVapiCallEnded,
+      });
       return NextResponse.json(reply, { status });
     }
 

@@ -4,6 +4,7 @@ import { interpolate, loadPromptSections, parsePromptMarkdown } from "../promptF
 import { buildVapiTools, toolServerUrl, vapiToolNames } from "../tools";
 import {
   parseVapiToolCall,
+  parseVapiCallEnded,
   buildToolCallResponse,
   handleVapiWebhook,
   isVapiToolCallPayload,
@@ -199,7 +200,7 @@ describe("handleVapiWebhook", () => {
 
   it("delivers the decision and replies so the assistant can close", async () => {
     const deliver = vi.fn();
-    const { status, body } = await handleVapiWebhook(acceptPayload, deliver);
+    const { status, body } = await handleVapiWebhook(acceptPayload, { onDecision: deliver });
 
     expect(deliver).toHaveBeenCalledWith({ workerId: "worker-2", decision: "accepted" });
     expect(status).toBe(200);
@@ -208,7 +209,7 @@ describe("handleVapiWebhook", () => {
 
   it("acks non tool-call messages without delivering anything", async () => {
     const deliver = vi.fn();
-    const { status } = await handleVapiWebhook({ message: { type: "status-update" } }, deliver);
+    const { status } = await handleVapiWebhook({ message: { type: "status-update" } }, { onDecision: deliver });
 
     expect(deliver).not.toHaveBeenCalled();
     expect(status).toBe(200);
@@ -218,10 +219,50 @@ describe("handleVapiWebhook", () => {
     const deliver = vi.fn(() => {
       throw new Error("state write failed");
     });
-    const { status, body } = await handleVapiWebhook(acceptPayload, deliver);
+    const { status, body } = await handleVapiWebhook(acceptPayload, { onDecision: deliver });
 
     expect(status).toBe(502);
     expect(body).toMatchObject({ success: false, error: "state write failed" });
+  });
+});
+
+describe("end-of-call reports", () => {
+  const endedPayload = {
+    message: {
+      type: "end-of-call-report",
+      endedReason: "customer-did-not-answer",
+      call: { id: "call_abc" },
+    },
+  };
+
+  it("extracts the call id and reason", () => {
+    expect(parseVapiCallEnded(endedPayload)).toEqual({
+      callId: "call_abc",
+      endedReason: "customer-did-not-answer",
+    });
+  });
+
+  it("ignores every other message type", () => {
+    expect(parseVapiCallEnded({ message: { type: "speech-update" } })).toBeNull();
+    expect(parseVapiCallEnded({ message: { type: "conversation-update" } })).toBeNull();
+  });
+
+  it("hands the ended call to the workflow so a no-answer cannot stall it", async () => {
+    const onDecision = vi.fn();
+    const onCallEnded = vi.fn();
+    const { status } = await handleVapiWebhook(endedPayload, { onDecision, onCallEnded });
+
+    expect(onCallEnded).toHaveBeenCalledWith({
+      callId: "call_abc",
+      endedReason: "customer-did-not-answer",
+    });
+    expect(onDecision).not.toHaveBeenCalled();
+    expect(status).toBe(200);
+  });
+
+  it("still acks when no call-ended handler is wired", async () => {
+    const { status } = await handleVapiWebhook(endedPayload, { onDecision: vi.fn() });
+    expect(status).toBe(200);
   });
 });
 

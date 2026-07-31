@@ -18,6 +18,7 @@ export { buildVapiTools, vapiToolNames, toolServerUrl } from "./tools";
 export {
   handleVapiWebhook,
   parseVapiToolCall,
+  parseVapiCallEnded,
   buildToolCallResponse,
   isVapiToolCallPayload,
 } from "./webhook";

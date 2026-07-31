@@ -56,10 +56,17 @@ export interface VapiToolDefinition {
 
 export type VapiToolName = "accept_shift" | "decline_shift" | "needs_clarification";
 
+/** A call that finished, whether or not the worker ever decided anything. */
+export interface VapiCallEnded {
+  callId?: string;
+  endedReason?: string;
+}
+
 /** Shape of the tool-call webhook Vapi POSTs to our server URL. */
 export interface VapiToolCallWebhook {
   message: {
     type: string;
+    endedReason?: string;
     toolCalls?: Array<{
       id: string;
       type?: string;
