@@ -11,16 +11,41 @@ import type {
   StartVapiShiftCallResult,
 } from "./types";
 
+/**
+ * Shifts are stored as absolute instants, but the assistant has to say them out
+ * loud. These render back into the venue's own zone, in the 12-hour form people
+ * actually speak ("Friday, 31 July", "6:00 PM").
+ */
+function spokenDate(iso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  }).format(new Date(iso));
+}
+
+function spokenTime(iso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(new Date(iso));
+}
+
 /** Turns backend worker + shift data into the only facts the assistant may speak. */
 export function buildShiftCallContext(input: StartVapiShiftCallInput): ShiftCallContext {
+  const { startsAt, endsAt, timeZone } = input.shift;
+
   return {
     workerId: input.workerId,
     workerName: input.workerName,
     language: resolveLanguage(input.language),
     role: input.shift.role,
-    date: input.shift.date,
-    startTime: input.shift.startTime,
-    endTime: input.shift.endTime,
+    date: spokenDate(startsAt, timeZone),
+    startTime: spokenTime(startsAt, timeZone),
+    endTime: spokenTime(endsAt, timeZone),
     location: input.shift.location,
     pay: input.shift.pay,
   };

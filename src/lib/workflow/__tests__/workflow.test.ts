@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { getWorkflowState, resetWorkflowState } from "../state";
+import { resetEmployees } from "../../employees/store";
 import {
   handleVoiceosCommand,
   handleVapiResult,
@@ -8,6 +9,13 @@ import {
 
 describe("Workflow Orchestrator Engine", () => {
   beforeEach(async () => {
+    // callableEmployees() drops anyone without a number, so the seeded roster
+    // needs phones before it can be called at all. No VAPI_API_KEY is set here,
+    // so startVapiShiftCall stays in its mock path and dials nobody.
+    process.env.DEMO_WORKER_1_PHONE = "+14155550101";
+    process.env.DEMO_WORKER_2_PHONE = "+14155550102";
+    process.env.DEMO_WORKER_3_PHONE = "+14155550103";
+    await resetEmployees();
     await resetWorkflowState();
   });
 
@@ -34,10 +42,10 @@ describe("Workflow Orchestrator Engine", () => {
     expect(state.status).toBe("CALLING_WORKER");
     expect(state.shift?.role).toBe("Kitchen Assistant");
     expect(state.currentWorkerIndex).toBe(0);
-    expect(state.currentWorkerId).toBe("worker-1");
+    expect(state.currentWorkerId).toBe("emp_maria");
     expect(state.timeline).toHaveLength(2);
     expect(state.timeline[0].message).toContain("Uncovered Kitchen Assistant shift created");
-    expect(state.timeline[1].message).toContain("Calling Maria in Spanish");
+    expect(state.timeline[1].message).toContain("Calling Maria Alvarez in Spanish");
   });
 
   it("should advance to Worker 2 (Ahmed) when Worker 1 declines", async () => {
@@ -50,15 +58,15 @@ describe("Workflow Orchestrator Engine", () => {
     });
 
     const state = await handleVapiResult({
-      workerId: "worker-1",
+      workerId: "emp_maria",
       decision: "declined",
     });
 
     expect(state.status).toBe("CALLING_WORKER");
     expect(state.currentWorkerIndex).toBe(1);
-    expect(state.currentWorkerId).toBe("worker-2");
-    expect(state.timeline.some((t) => t.message.includes("Maria declined"))).toBe(true);
-    expect(state.timeline.some((t) => t.message.includes("Calling Ahmed in Urdu"))).toBe(true);
+    expect(state.currentWorkerId).toBe("emp_ahmed");
+    expect(state.timeline.some((t) => t.message.includes("Maria Alvarez declined"))).toBe(true);
+    expect(state.timeline.some((t) => t.message.includes("Calling Ahmed Khan in Urdu"))).toBe(true);
   });
 
   it("should transition to TRIGGERING_VOICEOS when Worker 2 accepts", async () => {
@@ -70,12 +78,12 @@ describe("Workflow Orchestrator Engine", () => {
       location: "Downtown San Francisco",
     });
 
-    await handleVapiResult({ workerId: "worker-1", decision: "declined" });
-    const state = await handleVapiResult({ workerId: "worker-2", decision: "accepted" });
+    await handleVapiResult({ workerId: "emp_maria", decision: "declined" });
+    const state = await handleVapiResult({ workerId: "emp_ahmed", decision: "accepted" });
 
     expect(state.status).toBe("TRIGGERING_VOICEOS");
-    expect(state.shift?.assignedWorkerId).toBe("worker-2");
-    expect(state.timeline.some((t) => t.message.includes("Ahmed accepted"))).toBe(true);
+    expect(state.shift?.assignedWorkerId).toBe("emp_ahmed");
+    expect(state.timeline.some((t) => t.message.includes("Ahmed Khan accepted"))).toBe(true);
   });
 
   it("should ignore late worker callbacks once someone has already accepted", async () => {
@@ -87,11 +95,11 @@ describe("Workflow Orchestrator Engine", () => {
       location: "Downtown San Francisco",
     });
 
-    await handleVapiResult({ workerId: "worker-1", decision: "declined" });
-    await handleVapiResult({ workerId: "worker-2", decision: "accepted" });
+    await handleVapiResult({ workerId: "emp_maria", decision: "declined" });
+    await handleVapiResult({ workerId: "emp_ahmed", decision: "accepted" });
 
     const stateAfterLateCallback = await handleVapiResult({
-      workerId: "worker-3",
+      workerId: "emp_john",
       decision: "declined",
     });
 
@@ -107,7 +115,7 @@ describe("Workflow Orchestrator Engine", () => {
       location: "Downtown San Francisco",
     });
 
-    await handleVapiResult({ workerId: "worker-2", decision: "accepted" });
+    await handleVapiResult({ workerId: "emp_ahmed", decision: "accepted" });
 
     const state = await handleVoiceosResult({
       success: true,
@@ -133,17 +141,24 @@ describe("Workflow Orchestrator Engine", () => {
 
   it("should reject VoiceOS success without complete real proof", async () => {
     await handleVoiceosCommand(command);
-    await handleVapiResult({ workerId: "worker-1", decision: "accepted" });
+    await handleVapiResult({ workerId: "emp_maria", decision: "accepted" });
 
     await expect(handleVoiceosResult({ success: true })).rejects.toThrow(
       "scheduleUpdated must be true",
     );
-    expect((await getWorkflowState()).proof).toEqual({});
+
+    // callId comes from placing the call and is real. What must not appear is
+    // any VoiceOS proof, since VoiceOS supplied none.
+    const { proof } = await getWorkflowState();
+    expect(proof.scheduleUpdated).toBeUndefined();
+    expect(proof.calendarEventId).toBeUndefined();
+    expect(proof.slackMessageId).toBeUndefined();
+    expect(proof.smsMessageId).toBeUndefined();
   });
 
   it("should not claim the SMS was sent without a message ID", async () => {
     await handleVoiceosCommand(command);
-    await handleVapiResult({ workerId: "worker-1", decision: "accepted" });
+    await handleVapiResult({ workerId: "emp_maria", decision: "accepted" });
 
     const state = await handleVoiceosResult({
       success: true,
@@ -160,22 +175,58 @@ describe("Workflow Orchestrator Engine", () => {
 
   it("should ignore a duplicate decline from a worker who is no longer being called", async () => {
     await handleVoiceosCommand(command);
-    await handleVapiResult({ workerId: "worker-1", decision: "declined" });
+    await handleVapiResult({ workerId: "emp_maria", decision: "declined" });
 
     // Retried webhook for worker-1 while worker-2 is on the phone.
-    const state = await handleVapiResult({ workerId: "worker-1", decision: "declined" });
+    const state = await handleVapiResult({ workerId: "emp_maria", decision: "declined" });
 
-    expect(state.currentWorkerId).toBe("worker-2");
-    expect(state.timeline.filter((t) => t.message.includes("Maria declined"))).toHaveLength(1);
+    expect(state.currentWorkerId).toBe("emp_ahmed");
+    expect(state.timeline.filter((t) => t.message.includes("Maria Alvarez declined"))).toHaveLength(1);
   });
 
   it("should credit the worker who actually accepted", async () => {
     await handleVoiceosCommand(command);
-    const state = await handleVapiResult({ workerId: "worker-2", decision: "accepted" });
+    const state = await handleVapiResult({ workerId: "emp_ahmed", decision: "accepted" });
 
-    expect(state.shift?.assignedWorkerId).toBe("worker-2");
-    expect(state.currentWorkerId).toBe("worker-2");
+    expect(state.shift?.assignedWorkerId).toBe("emp_ahmed");
+    expect(state.currentWorkerId).toBe("emp_ahmed");
     expect(state.currentWorkerIndex).toBe(1);
+  });
+
+  it("should resolve the spoken shift window into absolute instants", async () => {
+    const state = await handleVoiceosCommand(command);
+
+    expect(state.shift?.startsAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(state.shift?.timeZone).toBeTruthy();
+    expect(new Date(state.shift!.endsAt).getTime()).toBeGreaterThan(
+      new Date(state.shift!.startsAt).getTime(),
+    );
+  });
+
+  it("should place a call when the manager command arrives", async () => {
+    const state = await handleVoiceosCommand(command);
+
+    expect(state.status).toBe("CALLING_WORKER");
+    expect(state.proof.callId).toBeTruthy();
+  });
+
+  it("should place a call for the next worker after a decline", async () => {
+    await handleVoiceosCommand(command);
+    const state = await handleVapiResult({ workerId: "emp_maria", decision: "declined" });
+
+    expect(state.currentWorkerId).toBe("emp_ahmed");
+    expect(state.proof.callId).toBeTruthy();
+  });
+
+  it("should not keep dialling once the roster is spent", async () => {
+    await handleVoiceosCommand(command);
+    await handleVapiResult({ workerId: "emp_maria", decision: "declined" });
+    await handleVapiResult({ workerId: "emp_ahmed", decision: "declined" });
+    const state = await handleVapiResult({ workerId: "emp_john", decision: "declined" });
+
+    expect(state.status).toBe("INCOMPLETE");
+    expect(state.currentWorkerId).toBeNull();
+    expect(state.timeline.at(-1)?.message).toContain("All workers declined");
   });
 
   it("should reject a malformed manager command", async () => {

@@ -1,3 +1,5 @@
+import { startVapiShiftCall } from "../../integrations/vapi";
+import { resolveShiftWindow } from "../time/schedule";
 import { getWorkflowState, updateWorkflowState } from "./state";
 import type { Shift, WorkerDecision, WorkflowState } from "./types";
 
@@ -7,6 +9,57 @@ function addTimelineEntry(state: WorkflowState, message: string) {
     message,
     timestamp: new Date().toISOString(),
   });
+}
+
+/**
+ * Points the queue at the next worker. Returns false when the roster is spent,
+ * leaving the run INCOMPLETE.
+ */
+function advanceToNextWorker(state: WorkflowState): boolean {
+  const nextIndex = state.currentWorkerIndex + 1;
+
+  if (nextIndex >= state.workers.length) {
+    state.status = "INCOMPLETE";
+    state.currentWorkerId = null;
+    addTimelineEntry(state, "All workers declined. Shift rescue incomplete.");
+    return false;
+  }
+
+  const nextWorker = state.workers[nextIndex];
+  state.currentWorkerIndex = nextIndex;
+  state.currentWorkerId = nextWorker.id;
+  state.status = "CALLING_WORKER";
+  addTimelineEntry(state, `Calling ${nextWorker.name} in ${nextWorker.language}`);
+  return true;
+}
+
+/**
+ * Dials whoever the queue points at, moving on if the call cannot be placed at
+ * all. A dead number must not strand the rescue on a worker who never rings.
+ * Vapi answers as soon as the call is queued, so this returns while the
+ * conversation is still live; the decision arrives later via the webhook.
+ */
+async function dialCurrentWorker(state: WorkflowState): Promise<void> {
+  while (state.shift && state.status === "CALLING_WORKER") {
+    const worker = state.workers[state.currentWorkerIndex];
+    if (!worker) return;
+
+    const result = await startVapiShiftCall({
+      workerId: worker.id,
+      workerName: worker.name,
+      phone: worker.phone,
+      language: worker.language,
+      shift: state.shift,
+    });
+
+    if (result.success) {
+      state.proof = { ...state.proof, callId: result.callId };
+      return;
+    }
+
+    addTimelineEntry(state, `Could not reach ${worker.name}: ${result.error}`);
+    if (!advanceToNextWorker(state)) return;
+  }
 }
 
 const REQUIRED_COMMAND_FIELDS = ["role", "date", "startTime", "endTime", "location"] as const;
@@ -30,12 +83,20 @@ export async function handleVoiceosCommand(payload: {
 
   const state = await getWorkflowState();
 
-  const shift: Shift = {
-    id: `shift_${Date.now()}`,
-    role: payload.role,
+  // VoiceOS hands over whatever the manager said ("Friday", "6 PM"), so the
+  // spoken window is resolved to absolute instants before anything stores it.
+  const window = resolveShiftWindow({
     date: payload.date,
     startTime: payload.startTime,
     endTime: payload.endTime,
+  });
+
+  const shift: Shift = {
+    id: `shift_${Date.now()}`,
+    role: payload.role,
+    startsAt: window.startsAt,
+    endsAt: window.endsAt,
+    timeZone: window.timeZone,
     location: payload.location,
     pay: payload.pay || "$24 per hour",
     assignedWorkerId: null,
@@ -55,6 +116,7 @@ export async function handleVoiceosCommand(payload: {
     state.currentWorkerId = worker1.id;
     state.status = "CALLING_WORKER";
     addTimelineEntry(state, `Calling ${worker1.name} in ${worker1.language}`);
+    await dialCurrentWorker(state);
   }
 
   return updateWorkflowState(state);
@@ -85,17 +147,8 @@ export async function handleVapiResult(payload: {
     state.status = "WORKER_DECLINED";
     addTimelineEntry(state, `${workerName} declined shift`);
 
-    // Advance to next worker
-    const nextIndex = state.currentWorkerIndex + 1;
-    if (nextIndex < state.workers.length) {
-      state.currentWorkerIndex = nextIndex;
-      const nextWorker = state.workers[nextIndex];
-      state.currentWorkerId = nextWorker.id;
-      state.status = "CALLING_WORKER";
-      addTimelineEntry(state, `Calling ${nextWorker.name} in ${nextWorker.language}`);
-    } else {
-      state.status = "INCOMPLETE";
-      addTimelineEntry(state, "All workers declined. Shift rescue incomplete.");
+    if (advanceToNextWorker(state)) {
+      await dialCurrentWorker(state);
     }
   } else if (payload.decision === "accepted") {
     state.status = "WORKER_ACCEPTED";
