@@ -130,41 +130,37 @@ export async function handleVoiceosResult(payload: {
   const state = await getWorkflowState();
 
   if (payload.success) {
-    // Record only what the integrations actually reported. This used to fall
-    // back to "calendar_123" / "slack_123" / "sms_123" and default
-    // scheduleUpdated to true, so a success with no IDs displayed invented
-    // proof under "Verified side effects" — a fabricated success, which is an
-    // automatic critical flag in judging.
-    const done: string[] = [];
-    if (payload.scheduleUpdated === true) {
-      state.proof.scheduleUpdated = true;
-      done.push("the schedule app");
-    }
-    if (payload.calendarEventId) {
-      state.proof.calendarEventId = payload.calendarEventId;
-      done.push("Google Calendar");
-    }
-    if (payload.slackMessageId) {
-      state.proof.slackMessageId = payload.slackMessageId;
-      done.push("Slack");
+    // A successful result must include proof from every VoiceOS side effect.
+    // Never fall back to invented IDs or silently accept partial completion.
+    if (!payload.scheduleUpdated) {
+      throw new Error("scheduleUpdated must be true for a successful VoiceOS result");
     }
 
+    const calendarEventId = payload.calendarEventId?.trim();
+    const slackMessageId = payload.slackMessageId?.trim();
+    if (!calendarEventId || !slackMessageId) {
+      throw new Error(
+        "Real calendarEventId and slackMessageId values are required for a successful VoiceOS result",
+      );
+    }
+
+    state.proof = {
+      ...state.proof,
+      scheduleUpdated: true,
+      calendarEventId,
+      slackMessageId,
+    };
     state.status = "VOICEOS_COMPLETE";
-    addTimelineEntry(
-      state,
-      done.length > 0
-        ? `VoiceOS updated ${done.join(", ")}`
-        : "VoiceOS reported success but returned no proof IDs",
-    );
+    addTimelineEntry(state, "VoiceOS updated the schedule app, Google Calendar, and Slack");
 
-    // The SMS is only claimed when a1mobile returned a message ID for it.
-    if (payload.smsMessageId) {
-      state.proof.smsMessageId = payload.smsMessageId;
+    const smsMessageId = payload.smsMessageId?.trim();
+    if (smsMessageId) {
+      state.proof.smsMessageId = smsMessageId;
       state.status = "COMPLETE";
       addTimelineEntry(state, "Confirmation SMS sent via a1mobile. Rescue complete!");
     } else {
       state.status = "SENDING_SMS";
-      addTimelineEntry(state, "Awaiting a1mobile confirmation SMS — no message ID yet");
+      addTimelineEntry(state, "VoiceOS updates complete; awaiting a1mobile confirmation SMS");
     }
   } else {
     state.status = "INCOMPLETE";

@@ -131,18 +131,14 @@ describe("Workflow Orchestrator Engine", () => {
     location: "Downtown San Francisco",
   };
 
-  it("should never invent proof IDs when VoiceOS reports success without them", async () => {
+  it("should reject VoiceOS success without complete real proof", async () => {
     await handleVoiceosCommand(command);
     await handleVapiResult({ workerId: "worker-1", decision: "accepted" });
 
-    const state = await handleVoiceosResult({ success: true });
-
-    expect(state.proof.calendarEventId).toBeUndefined();
-    expect(state.proof.slackMessageId).toBeUndefined();
-    expect(state.proof.smsMessageId).toBeUndefined();
-    expect(state.proof.scheduleUpdated).toBeUndefined();
-    // Nothing was confirmed, so the run must not claim to be complete.
-    expect(state.status).not.toBe("COMPLETE");
+    await expect(handleVoiceosResult({ success: true })).rejects.toThrow(
+      "scheduleUpdated must be true",
+    );
+    expect((await getWorkflowState()).proof).toEqual({});
   });
 
   it("should not claim the SMS was sent without a message ID", async () => {
@@ -159,6 +155,7 @@ describe("Workflow Orchestrator Engine", () => {
     expect(state.status).toBe("SENDING_SMS");
     expect(state.proof.smsMessageId).toBeUndefined();
     expect(state.timeline.some((t) => t.message.includes("Rescue complete"))).toBe(false);
+    expect(state.timeline.at(-1)?.message).toContain("awaiting a1mobile");
   });
 
   it("should ignore a duplicate decline from a worker who is no longer being called", async () => {
@@ -186,5 +183,16 @@ describe("Workflow Orchestrator Engine", () => {
       /Missing required shift fields/,
     );
     expect((await getWorkflowState()).status).toBe("WAITING_FOR_MANAGER_COMMAND");
+  });
+
+  it("should reject blank Calendar or Slack proof IDs", async () => {
+    await expect(
+      handleVoiceosResult({
+        success: true,
+        scheduleUpdated: true,
+        calendarEventId: "",
+        slackMessageId: "slack_proof_99",
+      }),
+    ).rejects.toThrow("Real calendarEventId and slackMessageId");
   });
 });

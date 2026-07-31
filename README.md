@@ -55,15 +55,15 @@ npm run dev
 
 Open `http://localhost:3000` for the live dashboard (`/dashboard` renders the same view). The UI follows the design system in `DESIGN.md`. Run `npm run typecheck` to verify the shared TypeScript contracts and `npm run build` to create a production build.
 
-## Currently mocked integrations
+## Integration status
 
 - a1mobile outbound calling returns `mock-a1mobile-call-id`.
 - a1mobile SMS returns `mock-a1mobile-message-id` with a `sent` status.
 - Vapi shift calls return `mock-vapi-call-id`.
-- VoiceOS completion returns mock schedule, Calendar, and Slack proof.
-- All five API routes return clearly labeled mock responses.
+- VoiceOS uses the real local MCP bridge in `src/integrations/voiceos/` and rejects missing or mock Calendar and Slack proof IDs.
+- The workflow waits for a real a1mobile SMS ID instead of inventing completion proof.
 
-Mocks exist only so teammates can integrate in parallel. They must not be presented as real sponsor proof in the final demo.
+The remaining a1mobile and Vapi stubs exist only so teammates can integrate in parallel. They must not be presented as real sponsor proof in the final demo.
 
 ## Final MVP boundary
 
