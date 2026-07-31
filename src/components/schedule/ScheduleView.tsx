@@ -94,6 +94,7 @@ function mondayOf(date: Date, timeZone: string): Date {
 export function ScheduleView() {
   const [data, setData] = useState<Schedule | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
+  const [roleFilter, setRoleFilter] = useState("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -152,10 +153,20 @@ export function ScheduleView() {
   }
 
   const rescue = data.rescue;
-  const covered = weekShifts.filter((s) => s.assignedEmployeeId).length;
-  const filling = weekShifts.filter((s) => rescue.active && rescue.shiftId === s.id).length;
-  const unfilled = weekShifts.length - covered - filling;
-  const selected = weekShifts.find((s) => s.id === selectedId) ?? null;
+  const roles = Array.from(new Set(data.shifts.map((s) => s.role))).sort();
+  // "All roles" is the unified view; picking a type narrows every part of the
+  // screen at once — calendar, counts and the attention banner.
+  const visibleShifts = roleFilter === "all" ? weekShifts : weekShifts.filter((s) => s.role === roleFilter);
+  const covered = visibleShifts.filter((s) => s.assignedEmployeeId).length;
+  const filling = visibleShifts.filter((s) => rescue.active && rescue.shiftId === s.id).length;
+  const unfilled = visibleShifts.length - covered - filling;
+  const selected = visibleShifts.find((s) => s.id === selectedId) ?? null;
+
+  // Every slot that still has nobody on it. Surfaced, never acted on: a rescue
+  // only ever starts from an explicit click here or a VoiceOS command.
+  const problemSlots = visibleShifts
+    .filter((s) => !s.assignedEmployeeId && !(rescue.active && rescue.shiftId === s.id))
+    .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
 
   const findCoverage = async (shiftId: string) => {
     setBusyId(shiftId);
@@ -186,6 +197,17 @@ export function ScheduleView() {
           <h1 className="page-title">{data.venue.name}</h1>
         </div>
         <div className="week-nav">
+          <label className="role-filter">
+            <span className="visually-hidden">Filter by role</span>
+            <select className="select" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
+              <option value="all">All roles</option>
+              {roles.map((role) => (
+                <option key={role} value={role}>
+                  {role}
+                </option>
+              ))}
+            </select>
+          </label>
           <button className="btn btn-ghost btn-sm" onClick={() => setWeekOffset((w) => w - 1)} aria-label="Previous week">
             ‹
           </button>
@@ -227,6 +249,44 @@ export function ScheduleView() {
 
       {error && <p className="notice">{error}</p>}
 
+      {problemSlots.length > 0 && (
+        <section className="attention" aria-label="Shifts needing cover">
+          <div className="attention-head">
+            <h2 className="attention-title">
+              {problemSlots.length === 1
+                ? "1 shift has nobody on it"
+                : `${problemSlots.length} shifts have nobody on them`}
+            </h2>
+            <p className="attention-note">
+              Nothing is dialled until you start it here, or a manager asks by voice.
+            </p>
+          </div>
+          <ul className="attention-list">
+            {problemSlots.map((shift) => (
+              <li key={shift.id} className="attention-row">
+                <button className="attention-slot" onClick={() => setSelectedId(shift.id)}>
+                  <span className="attention-when">
+                    {new Intl.DateTimeFormat("en-GB", { timeZone, weekday: "short", day: "numeric", month: "short" }).format(new Date(shift.startsAt))}
+                    {" · "}
+                    {formatRange(shift.startsAt, shift.endsAt, timeZone)}
+                  </span>
+                  <span className="attention-role">{shift.role}</span>
+                </button>
+                {data.canManage && (
+                  <button
+                    className="btn btn-primary btn-sm"
+                    disabled={busyId === shift.id || rescue.active}
+                    onClick={() => findCoverage(shift.id)}
+                  >
+                    {busyId === shift.id ? "Starting…" : rescue.active ? "Busy" : "Find coverage"}
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <section className="calendar" aria-label="Week schedule">
         <div className="calendar-hours" aria-hidden="true">
           {Array.from({ length: DAY_END - DAY_START + 1 }, (_, i) => (
@@ -239,7 +299,7 @@ export function ScheduleView() {
         <div className="calendar-grid">
           {days.map(({ key, date }) => {
             const isToday = key === localDayKey(now.toISOString(), timeZone);
-            const dayShifts = weekShifts.filter((s) => localDayKey(s.startsAt, timeZone) === key);
+            const dayShifts = visibleShifts.filter((s) => localDayKey(s.startsAt, timeZone) === key);
 
             return (
               <div key={key} className={`calendar-day${isToday ? " calendar-day-today" : ""}`}>
