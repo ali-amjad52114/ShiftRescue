@@ -42,6 +42,7 @@ export async function GET() {
         ? state.workers.find((w) => w.id === state.currentWorkerId)?.language ?? null
         : null,
       timeline: state.timeline,
+      transcript: state.transcript ?? [],
       confirmedBySms: Boolean(state.proof.smsMessageId),
     },
   });

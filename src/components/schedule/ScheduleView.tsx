@@ -36,6 +36,7 @@ interface Rescue {
   callingName: string | null;
   callingLanguage: string | null;
   timeline: Array<{ id: string; message: string; timestamp: string }>;
+  transcript: Array<{ id: string; speaker: "agent" | "worker"; text: string; timestamp: string }>;
   confirmedBySms: boolean;
 }
 
@@ -345,14 +346,45 @@ export function ScheduleView() {
             </div>
             <span className="live-status">{rescue.status.replace(/_/g, " ")}</span>
           </div>
-          <ul className="live-events">
-            {rescue.timeline.map((entry, index, all) => (
-              <li key={entry.id} className={`live-event${index === all.length - 1 ? " live-event-latest" : ""}`}>
-                <time dateTime={entry.timestamp}>{formatTime(entry.timestamp, timeZone)}</time>
-                <span>{entry.message}</span>
-              </li>
-            ))}
-          </ul>
+
+          <p className="live-headline">
+            {rescue.callingName
+              ? `Calling ${rescue.callingName}`
+              : rescue.confirmedBySms
+                ? "Cover confirmed"
+                : "Working through the team"}
+            {rescue.callingLanguage && <span className="live-language"> speaking {rescue.callingLanguage}</span>}
+          </p>
+
+          <div className="live-columns">
+            <div className="live-column">
+              <p className="live-column-label">Conversation</p>
+              {(rescue.transcript ?? []).length === 0 ? (
+                <p className="live-waiting">Waiting for the first words of the call…</p>
+              ) : (
+                <ul className="transcript">
+                  {(rescue.transcript ?? []).slice(-8).map((line) => (
+                    <li key={line.id} className={`transcript-line transcript-${line.speaker}`}>
+                      <span className="transcript-who">{line.speaker === "agent" ? "Agent" : "Worker"}</span>
+                      <span className="transcript-text">{line.text}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="live-column live-column-narrow">
+              <p className="live-column-label">Activity</p>
+              <ul className="live-feed">
+                {rescue.timeline.slice(-6).map((entry, index, all) => (
+                  <li key={entry.id} className={`live-event${index === all.length - 1 ? " live-event-latest" : ""}`}>
+                    <time dateTime={entry.timestamp}>{formatTime(entry.timestamp, timeZone)}</time>
+                    <span>{entry.message}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
         </section>
       )}
 
@@ -462,6 +494,8 @@ export function ScheduleView() {
         </div>
       </section>
 
+      {rescue.active && <ProgressDock rescue={rescue} />}
+
       {selected && (
         <ShiftDetail
           shift={selected}
@@ -488,6 +522,62 @@ export function ScheduleView() {
         />
       )}
     </main>
+  );
+}
+
+const DOCK_STEPS = ["Request", "Calling", "Accepted", "Updating", "Confirmed"] as const;
+
+/** Where the run has reached, mapped onto the five things an operator cares about. */
+function dockStage(status: string): number {
+  switch (status) {
+    case "SHIFT_CREATED":
+      return 0;
+    case "CALLING_WORKER":
+    case "WORKER_DECLINED":
+      return 1;
+    case "WORKER_ACCEPTED":
+      return 2;
+    case "TRIGGERING_VOICEOS":
+    case "VOICEOS_COMPLETE":
+      return 3;
+    case "SENDING_SMS":
+      return 4;
+    case "COMPLETE":
+      return 5;
+    default:
+      return 0;
+  }
+}
+
+/** A persistent bar so the state of the call is readable from across a room. */
+function ProgressDock({ rescue }: { rescue: Rescue }) {
+  const stage = dockStage(rescue.status);
+  const headline = rescue.callingName
+    ? `Calling ${rescue.callingName}${rescue.callingLanguage ? ` · ${rescue.callingLanguage}` : ""}`
+    : stage >= 5
+      ? "Cover confirmed"
+      : "Working through the team";
+
+  return (
+    <aside className="dock" aria-label="Coverage progress">
+      <div className="dock-inner">
+        <span className="dock-headline">
+          <span className="live-dot" />
+          {headline}
+        </span>
+        <ol className="dock-steps">
+          {DOCK_STEPS.map((label, index) => (
+            <li
+              key={label}
+              className={`dock-step${index < stage ? " dock-step-done" : index === stage ? " dock-step-active" : ""}`}
+            >
+              <span className="dock-step-dot" />
+              <span className="dock-step-label">{label}</span>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </aside>
   );
 }
 

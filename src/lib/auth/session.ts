@@ -5,21 +5,29 @@ export const SESSION_COOKIE = "shiftrescue_session";
 const SESSION_DAYS = 7;
 
 /**
- * A single shared password guards the staff directory, the admin console and
+ * One shared operator login guards the staff directory, the admin console and
  * every mutation. The public schedule stays open because it carries no personal
  * data; staff phone numbers only exist behind this gate.
  *
- * This is deliberately one shared credential rather than user accounts — there
- * is one operator. It is not a substitute for per-user auth if this ever grows
- * real tenants.
+ * The credentials default to admin / admin123 so the app is usable straight
+ * away. They are weak and shared on purpose — this is a demonstration login,
+ * not per-user auth, and APP_USERNAME / APP_PASSWORD override both.
  */
-function password(): string | null {
+const DEFAULT_USERNAME = "admin";
+const DEFAULT_PASSWORD = "admin123";
+
+function username(): string {
+  const value = process.env.APP_USERNAME;
+  return value && value.trim() !== "" ? value : DEFAULT_USERNAME;
+}
+
+function password(): string {
   const value = process.env.APP_PASSWORD;
-  return value && value.trim() !== "" ? value : null;
+  return value && value.trim() !== "" ? value : DEFAULT_PASSWORD;
 }
 
 function secret(): string {
-  return process.env.APP_SESSION_SECRET || password() || "shiftrescue-dev-secret";
+  return process.env.APP_SESSION_SECRET || password();
 }
 
 function sign(expiry: number): string {
@@ -46,22 +54,21 @@ export function verifyToken(token: string | undefined): boolean {
   return safeEqual(signature, sign(expiry));
 }
 
-export function checkPassword(candidate: unknown): boolean {
-  const expected = password();
-  if (!expected) return false;
+function matches(candidate: unknown, expected: string): boolean {
   if (typeof candidate !== "string" || candidate === "") return false;
   return safeEqual(candidate.padEnd(64, "\0").slice(0, 64), expected.padEnd(64, "\0").slice(0, 64));
 }
 
-/** True when a password is configured at all. */
+export function checkCredentials(user: unknown, pass: unknown): boolean {
+  return matches(user, username()) && matches(pass, password());
+}
+
+/** Credentials always exist now that they have defaults. */
 export function authConfigured(): boolean {
-  return password() !== null;
+  return true;
 }
 
 export async function isAuthenticated(): Promise<boolean> {
-  // With no password configured, local development stays usable; a deployment
-  // without one refuses rather than silently exposing the staff directory.
-  if (!authConfigured()) return process.env.VERCEL !== "1";
   const store = await cookies();
   return verifyToken(store.get(SESSION_COOKIE)?.value);
 }

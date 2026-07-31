@@ -53,6 +53,7 @@ export async function startCoverage(shiftId: string): Promise<WorkflowState> {
     currentWorkerIndex: -1,
     currentWorkerId: null,
     timeline: [],
+    transcript: [],
     proof: {},
   };
 

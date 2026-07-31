@@ -43,6 +43,15 @@ export interface Shift {
   assignedWorkerId: string | null;
 }
 
+/** One utterance from the live call, as Vapi streams it back. */
+export interface TranscriptLine {
+  id: string;
+  /** Who spoke: the agent or the worker on the other end. */
+  speaker: "agent" | "worker";
+  text: string;
+  timestamp: string;
+}
+
 export interface TimelineEvent {
   id: string;
   message: string;
@@ -69,5 +78,7 @@ export interface WorkflowState {
   /** Only a decision from this server-generated call attempt may mutate the run. */
   activeAttemptId: string | null;
   timeline: TimelineEvent[];
+  /** Cleared whenever a new worker is dialled — it belongs to the current call. */
+  transcript: TranscriptLine[];
   proof: WorkflowProof;
 }

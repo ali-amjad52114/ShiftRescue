@@ -25,6 +25,7 @@ function createInitialState(workers: WorkflowState["workers"]): WorkflowState {
     currentWorkerId: null,
     activeAttemptId: null,
     timeline: [],
+    transcript: [],
     proof: {},
   };
 }

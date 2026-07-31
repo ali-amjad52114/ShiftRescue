@@ -1,17 +1,13 @@
 import { NextResponse } from "next/server";
-import { SESSION_COOKIE, authConfigured, checkPassword, issueToken } from "@/lib/auth/session";
+import { SESSION_COOKIE, checkCredentials, issueToken } from "@/lib/auth/session";
 
 export async function POST(req: Request) {
-  if (!authConfigured()) {
-    return NextResponse.json(
-      { success: false, error: "No password is configured for this deployment." },
-      { status: 503 },
-    );
-  }
-
   const body = await req.json().catch(() => ({}));
-  if (!checkPassword(body?.password)) {
-    return NextResponse.json({ success: false, error: "Incorrect password" }, { status: 401 });
+  if (!checkCredentials(body?.username, body?.password)) {
+    return NextResponse.json(
+      { success: false, error: "Incorrect username or password" },
+      { status: 401 },
+    );
   }
 
   const token = issueToken();

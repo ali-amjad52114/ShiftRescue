@@ -95,6 +95,10 @@ body {
 }
 
 body {
+  /* Column layout so the footer sits at the bottom of short pages
+     without floating over tall ones. */
+  display: flex;
+  flex-direction: column;
   background-color: var(--surface-sage-canvas);
   color: var(--color-deep-forest);
   font-family: var(--font-graphik);
@@ -167,6 +171,7 @@ body {
 /* ------------------------------------------------------------------- Page */
 
 .page {
+  width: 100%;
   max-width: var(--page-max-width);
   margin: 0 auto;
   padding: var(--spacing-40) var(--spacing-24) var(--spacing-88);
@@ -708,6 +713,7 @@ body {
 /* ----------------------------------------------------------------- Footer */
 
 .footer {
+  margin-top: auto;
   background: var(--surface-paper-white);
   border-top: 1px solid var(--hairline);
 }
@@ -1328,3 +1334,123 @@ body {
 
 .live-event time { font-variant-numeric: tabular-nums; flex: none; }
 .live-event-latest { color: var(--color-paper-white); }
+
+/* ------------------------------------------- Live transcript + progress dock */
+
+.live-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: var(--spacing-24);
+  border-top: 1px solid var(--hairline-inverse);
+  padding-top: var(--spacing-16);
+}
+
+.live-column { display: flex; flex-direction: column; gap: var(--spacing-12); min-width: 0; }
+
+.live-column-label {
+  margin: 0;
+  font-size: var(--text-caption);
+  letter-spacing: var(--tracking-caption);
+  text-transform: uppercase;
+  color: var(--color-chartreuse-lime);
+}
+
+.live-waiting {
+  margin: 0;
+  font-size: var(--text-body-sm);
+  color: rgba(252, 252, 252, 0.55);
+}
+
+.transcript {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-8);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.transcript-line {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr);
+  gap: var(--spacing-12);
+  font-size: var(--text-body-sm);
+  line-height: var(--leading-body-sm);
+}
+
+.transcript-who {
+  font-size: var(--text-caption);
+  letter-spacing: var(--tracking-caption);
+  text-transform: uppercase;
+  color: rgba(252, 252, 252, 0.55);
+  padding-top: 2px;
+}
+
+.transcript-text { color: var(--color-paper-white); }
+.transcript-agent .transcript-text { color: rgba(252, 252, 252, 0.8); }
+.transcript-worker .transcript-who { color: var(--color-chartreuse-lime); }
+
+/* Pinned so the state of the call is readable from across the room. */
+.dock {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  background: var(--color-ink-black);
+  color: var(--color-paper-white);
+  border-radius: var(--radius-cards);
+}
+
+.dock-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-24);
+  padding: var(--spacing-16) var(--spacing-24);
+  flex-wrap: wrap;
+}
+
+.dock-headline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-12);
+  font-size: var(--text-subheading);
+  font-weight: var(--font-weight-medium);
+}
+
+.dock-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-20);
+  flex-wrap: wrap;
+}
+
+.dock-step {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-8);
+  font-size: var(--text-body-sm);
+  color: rgba(252, 252, 252, 0.45);
+}
+
+.dock-step-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-tags);
+  background: rgba(252, 252, 252, 0.25);
+}
+
+.dock-step-done { color: rgba(252, 252, 252, 0.75); }
+.dock-step-done .dock-step-dot { background: var(--color-paper-white); }
+
+.dock-step-active { color: var(--color-chartreuse-lime); font-weight: var(--font-weight-medium); }
+.dock-step-active .dock-step-dot { background: var(--color-chartreuse-lime); }
+
+@media (max-width: 900px) {
+  .live-columns { grid-template-columns: minmax(0, 1fr); }
+  .dock-inner { flex-direction: column; align-items: flex-start; gap: var(--spacing-12); }
+}

@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 export function LoginForm() {
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -15,7 +16,7 @@ export function LoginForm() {
       const res = await fetch("/api/session", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ username, password }),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -37,8 +38,18 @@ export function LoginForm() {
         <div className="card-head">
           <h1 className="card-title">Sign in</h1>
         </div>
-        <p className="empty">Managing staff and shifts needs the team password.</p>
+        <p className="empty">Managing staff and shifts needs an operator sign-in.</p>
         <form onSubmit={submit} className="form">
+          <label className="field">
+            <span className="field-label">Username</span>
+            <input
+              className="input"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              autoFocus
+              autoComplete="username"
+            />
+          </label>
           <label className="field">
             <span className="field-label">Password</span>
             <input
@@ -46,12 +57,11 @@ export function LoginForm() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              autoFocus
               autoComplete="current-password"
             />
           </label>
           {error && <p className="notice">{error}</p>}
-          <button className="btn btn-primary" type="submit" disabled={busy || password === ""}>
+          <button className="btn btn-primary" type="submit" disabled={busy || username === "" || password === ""}>
             {busy ? "Signing in…" : "Sign in"}
           </button>
         </form>

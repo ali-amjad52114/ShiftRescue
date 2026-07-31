@@ -40,6 +40,7 @@ function advanceToNextWorker(state: WorkflowState): boolean {
   state.currentWorkerId = nextWorker.id;
   state.activeAttemptId = null;
   state.status = "CALLING_WORKER";
+  state.transcript = []; // a new call is a new conversation
   addTimelineEntry(state, `Calling ${nextWorker.name} in ${nextWorker.language}`);
   return true;
 }
