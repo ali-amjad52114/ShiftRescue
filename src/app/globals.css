@@ -960,7 +960,8 @@ body {
   right: 0;
   height: 2px;
   background: var(--color-vivid-green);
-  z-index: 2;
+  z-index: 20;
+  pointer-events: none;
 }
 
 /* ------------------------------------------------------------ Shift blocks */

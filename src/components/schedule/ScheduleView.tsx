@@ -443,11 +443,12 @@ export function ScheduleView() {
                     const top = Math.max(0, (dayFraction(shift.startsAt, timeZone) - DAY_START / 24) / BAND);
                     const bottom = Math.min(1, (dayFraction(shift.endsAt, timeZone) - DAY_START / 24) / BAND);
                     const state = person ? "covered" : isFilling ? "filling" : "open";
+                    const roleClass = getRoleClass(shift.role);
 
                     return (
                       <button
                         key={shift.id}
-                        className={`shift-block shift-block-${state}${selectedId === shift.id ? " shift-block-selected" : ""}`}
+                        className={`shift-block shift-block-${state} shift-block-role-${roleClass}${selectedId === shift.id ? " shift-block-selected" : ""}`}
                         style={(() => {
                           const width = Math.max(1 / lanes, 0.62);
                           const step = lanes > 1 ? (1 - width) / (lanes - 1) : 0;
@@ -740,4 +741,13 @@ function ShiftDetail({
       )}
     </section>
   );
+}
+
+function getRoleClass(role: string): string {
+  const normalized = role.toLowerCase();
+  if (normalized.includes("kitchen") || normalized.includes("cook") || normalized.includes("chef")) return "kitchen";
+  if (normalized.includes("server") || normalized.includes("wait")) return "server";
+  if (normalized.includes("bar") || normalized.includes("mixologist")) return "bartender";
+  if (normalized.includes("manager") || normalized.includes("lead")) return "manager";
+  return "default";
 }
