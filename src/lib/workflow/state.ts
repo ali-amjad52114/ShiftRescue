@@ -1,4 +1,4 @@
-import { demoWorkers } from "@/data/demo-data";
+import { demoWorkers } from "../../data/demo-data";
 import type { WorkflowState } from "./types";
 
 function createInitialState(): WorkflowState {
@@ -13,13 +13,26 @@ function createInitialState(): WorkflowState {
   };
 }
 
-let workflowState = createInitialState();
+const globalForWorkflow = globalThis as unknown as {
+  workflowState: WorkflowState | undefined;
+};
+
+let workflowState = globalForWorkflow.workflowState ?? createInitialState();
+globalForWorkflow.workflowState = workflowState;
 
 export function getWorkflowState(): WorkflowState {
   return workflowState;
 }
 
-export function resetWorkflowState(): WorkflowState {
-  workflowState = createInitialState();
+export function updateWorkflowState(newState: WorkflowState): WorkflowState {
+  workflowState = newState;
+  globalForWorkflow.workflowState = workflowState;
   return workflowState;
 }
+
+export function resetWorkflowState(): WorkflowState {
+  workflowState = createInitialState();
+  globalForWorkflow.workflowState = workflowState;
+  return workflowState;
+}
+
