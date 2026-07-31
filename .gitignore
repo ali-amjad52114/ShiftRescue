@@ -8,3 +8,5 @@ npm-debug.log*
 .env*.local
 .aidesigner/*
 !.aidesigner/.gitkeep
+Call_list - Sheet1.csv
+campaign-template.csv

@@ -1,19 +1,80 @@
-import type { Shift } from "@/lib/workflow/types";
+import {
+  buildAssistantOverrides,
+  vapiApiBase,
+  vapiAssistantId,
+  vapiPhoneNumberId,
+} from "./assistant";
+import { resolveLanguage } from "./prompt";
+import type {
+  ShiftCallContext,
+  StartVapiShiftCallInput,
+  StartVapiShiftCallResult,
+} from "./types";
 
-export async function startVapiShiftCall(input: {
-  workerId: string;
-  workerName: string;
-  phone: string;
-  language: string;
-  shift: Shift;
-}): Promise<{
-  success: boolean;
-  callId?: string;
-  error?: string;
-}> {
-  void input;
+/** Turns backend worker + shift data into the only facts the assistant may speak. */
+export function buildShiftCallContext(input: StartVapiShiftCallInput): ShiftCallContext {
   return {
-    success: true,
-    callId: "mock-vapi-call-id",
+    workerId: input.workerId,
+    workerName: input.workerName,
+    language: resolveLanguage(input.language),
+    role: input.shift.role,
+    date: input.shift.date,
+    startTime: input.shift.startTime,
+    endTime: input.shift.endTime,
+    location: input.shift.location,
+    pay: input.shift.pay,
   };
+}
+
+/**
+ * Starts one outbound call from the a1mobile number to the worker.
+ * Falls back to the mock call ID when Vapi credentials are absent, so the
+ * demo workflow still runs locally.
+ */
+export async function startVapiShiftCall(
+  input: StartVapiShiftCallInput
+): Promise<StartVapiShiftCallResult> {
+  const apiKey = process.env.VAPI_API_KEY;
+
+  if (!apiKey || !process.env.VAPI_ASSISTANT_ID || !vapiPhoneNumberId) {
+    return { success: true, callId: "mock-vapi-call-id" };
+  }
+
+  if (!input.phone) {
+    return { success: false, error: `No phone number for ${input.workerId}` };
+  }
+
+  const context = buildShiftCallContext(input);
+
+  try {
+    const res = await fetch(`${vapiApiBase}/call`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        assistantId: vapiAssistantId,
+        phoneNumberId: vapiPhoneNumberId,
+        customer: { number: input.phone, name: input.workerName },
+        assistantOverrides: buildAssistantOverrides(context),
+      }),
+    });
+
+    const data = (await res.json().catch(() => ({}))) as { id?: string; message?: string };
+
+    if (!res.ok) {
+      return {
+        success: false,
+        error: `Vapi call failed (${res.status}): ${data.message || "unknown error"}`,
+      };
+    }
+
+    return { success: true, callId: data.id };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Vapi call failed",
+    };
+  }
 }
