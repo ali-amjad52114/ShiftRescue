@@ -100,7 +100,73 @@ function localizePay(pay: string, language: SupportedLanguage): string {
   return pay;
 }
 
-function localizeShift(
+export // "6:00 PM" -> "6:00 de la tarde" / "شام 6:00" / "शाम 6:00".
+// "PM" is an English token; leaving it in turned every Spanish call into a
+// mix of two languages.
+function localizeTime(time: string, language: SupportedLanguage): string {
+  const match = time.match(/^\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*$/i);
+  if (!match) return time;
+
+  let hour = Number(match[1]) % 12;
+  const minute = match[2] ?? "00";
+  const isPm = match[3].toLowerCase() === "pm";
+  if (isPm) hour += 12;
+
+  const clock = `${hour % 12 === 0 ? 12 : hour % 12}${minute === "00" ? "" : ":" + minute}`;
+  // Urdu and Hindi separate late afternoon from midday; Spanish runs "tarde"
+  // right through until night.
+  const partOfDay =
+    hour < 12 ? "morning" : hour < 16 ? "afternoon" : hour < 20 ? "evening" : "night";
+
+  if (language === "spanish") {
+    const es = {
+      morning: "de la mañana",
+      afternoon: "de la tarde",
+      evening: "de la tarde",
+      night: "de la noche",
+    }[partOfDay];
+    return `${clock} ${es}`;
+  }
+  if (language === "urdu") {
+    const ur = { morning: "صبح", afternoon: "دوپہر", evening: "شام", night: "رات" }[partOfDay];
+    return `${ur} ${clock}`;
+  }
+  if (language === "hindi") {
+    const hi = { morning: "सुबह", afternoon: "दोपहर", evening: "शाम", night: "रात" }[partOfDay];
+    return `${hi} ${clock}`;
+  }
+  return time;
+}
+
+// Place names stay proper nouns, but a Latin-script name dropped into an Urdu
+// sentence reads as badly as an English word. Transliterate the few we use and
+// leave anything unknown alone.
+const PLACES: Record<string, Partial<Record<SupportedLanguage, string>>> = {
+  "san francisco": { urdu: "سان فرانسسکو", hindi: "सैन फ़्रांसिस्को" },
+  "oakland": { urdu: "اوکلینڈ", hindi: "ओकलैंड" },
+  "berkeley": { urdu: "برکلے", hindi: "बर्कले" },
+};
+
+// "Downtown San Francisco" -> "el centro de San Francisco".
+// The city is a proper noun and stays; "downtown" is an ordinary word and does
+// not belong in a Spanish sentence. Anything whose shape is not recognised
+// passes through untouched rather than being mangled.
+function localizeLocation(location: string, language: SupportedLanguage): string {
+  const value = location.trim();
+
+  const downtown = value.match(/^downtown\s+(.+)$/i) || value.match(/^(.+?)\s+downtown$/i);
+  if (downtown) {
+    const raw = downtown[1].trim();
+    const place = lookup(PLACES, raw, language) ?? raw;
+    if (language === "spanish") return `el centro de ${place}`;
+    if (language === "urdu") return `${place} کے مرکز`;
+    if (language === "hindi") return `${place} के केंद्र`;
+  }
+
+  return lookup(PLACES, value, language) ?? value;
+}
+
+export function localizeShift(
   shift: ShiftDetails,
   language: SupportedLanguage,
 ): ShiftDetails {
@@ -110,6 +176,9 @@ function localizeShift(
     ...shift,
     role: localizeRole(shift.role, language),
     date: localizeDate(shift.date, language),
+    location: localizeLocation(shift.location, language),
+    startTime: localizeTime(shift.startTime, language),
+    endTime: localizeTime(shift.endTime, language),
     pay: localizePay(shift.pay, language),
   };
 }

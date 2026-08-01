@@ -8,6 +8,7 @@ import { spokenShiftWindow } from "../../lib/time/schedule";
 import { VENUE_NAME } from "../../lib/shifts/store";
 import { maxPayFor, maxPayIncrease } from "./pay";
 import { resolveLanguage } from "./prompt";
+import { localizeShift, normalizeLanguage } from "../a1mobile/messages";
 import type {
   ShiftCallContext,
   StartVapiShiftCallInput,
@@ -25,6 +26,33 @@ let mockCallCounter = 0;
  * shift written by either shape still reads correctly over the phone.
  */
 export function buildShiftCallContext(input: StartVapiShiftCallInput): ShiftCallContext {
+  // The backend holds one English copy of the shift. Handing that straight to
+  // a Spanish call produced "un turno de Server ... con pago de $21 per hour":
+  // the assistant was told to state the facts exactly, so it read the English.
+  // Translate them here, the same way the confirmation SMS already does, so
+  // what reaches the call is already in the right language.
+  const language = resolveLanguage(input.language);
+  const spokenLanguage = normalizeLanguage(language);
+  const englishShift = {
+    role: input.shift.role,
+    // Spoken forms come from the instants when the shift has no written ones,
+    // which is every shift created from the schedule.
+    ...spokenShiftWindow(input.shift),
+    location: input.shift.location,
+    pay: input.shift.pay,
+  };
+
+  const localized = localizeShift(englishShift, spokenLanguage);
+
+  // The negotiating ceiling is spoken out loud too, so it goes through the same
+  // translation — from the English source, never from the already-translated
+  // copy. Left in English it was the one number that broke the rule against
+  // English inside a Spanish call.
+  const maxPay = localizeShift(
+    { ...englishShift, pay: maxPayFor(input.shift.pay) },
+    spokenLanguage,
+  ).pay;
+
   return {
     workerId: input.workerId,
     shiftId: input.shift.id,
@@ -32,12 +60,14 @@ export function buildShiftCallContext(input: StartVapiShiftCallInput): ShiftCall
       input.attemptId ??
       `att_${input.workerId}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
     workerName: input.workerName,
-    language: resolveLanguage(input.language),
-    role: input.shift.role,
-    ...spokenShiftWindow(input.shift),
-    location: input.shift.location,
-    pay: input.shift.pay,
-    maxPay: maxPayFor(input.shift.pay),
+    language,
+    role: localized.role,
+    date: localized.date,
+    startTime: localized.startTime,
+    endTime: localized.endTime,
+    location: localized.location,
+    pay: localized.pay,
+    maxPay,
     payHeadroom: `$${maxPayIncrease()}`,
     venueName: VENUE_NAME,
   };

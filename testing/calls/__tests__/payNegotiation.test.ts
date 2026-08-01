@@ -124,6 +124,35 @@ describe("what the assistant is told about pay", () => {
     expect(prompt).toMatch(/Never state your ceiling out loud/i);
   });
 
+  it("translates the ceiling for a call that is not in English", () => {
+    // The posted rate was translated but the ceiling was not, so the one time
+    // the assistant negotiated it said "twenty nine dollars per hour" in the
+    // middle of a Spanish call — the exact thing the localisation exists to
+    // stop. Both numbers come from the same English source, never from the
+    // already-translated copy.
+    const spanish = buildCallContext({
+      workerId: "emp_maria",
+      workerName: "Maria",
+      language: "Spanish",
+      shiftId: "sh_1",
+      attemptId: "att_1",
+      shift: {
+        role: "Server",
+        location: "Downtown San Francisco",
+        pay: "$24 per hour",
+        date: "Friday, July 31",
+        startTime: "6:00 PM",
+        endTime: "11:00 PM",
+      },
+    });
+
+    expect(spanish.pay).toContain("por hora");
+    expect(spanish.maxPay).toContain("por hora");
+    expect(spanish.maxPay).not.toMatch(/per hour/);
+    // Translated, not altered: still the posted rate plus the budget.
+    expect(spanish.maxPay).toContain("29");
+  });
+
   it("can report the agreed rate back through accept_shift", () => {
     const accept = buildVapiTools().find((t) => t.function.name === "accept_shift")!;
     expect(accept.function.parameters.properties).toHaveProperty("agreedPay");

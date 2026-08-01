@@ -1,4 +1,9 @@
-import { callbackInviteSms, shiftConfirmationSms } from "./messages";
+import {
+  callbackInviteSms,
+  localizeShift,
+  normalizeLanguage,
+  shiftConfirmationSms,
+} from "./messages";
 import type { ShiftDetails } from "./messages";
 import { buildAssistantOverrides } from "../vapi/assistant";
 import { maxPayFor, maxPayIncrease } from "../vapi/pay";
@@ -169,21 +174,48 @@ export function buildCallContext(input: {
   workerName?: string;
   shift?: ShiftDetails;
 }): ShiftCallContext {
-  const pay = input.shift?.pay ?? "";
+  // This is the builder the live dial actually uses — dialViaVapi() below, not
+  // the one in vapi/client.ts. The shift is stored once, in English; handing
+  // that straight to a Spanish call had the assistant reading "un turno de
+  // Server ... con pago de $21 per hour", because the prompt tells it to state
+  // the facts exactly as given. Translating here, the same way the confirmation
+  // SMS already does, means what reaches the call is already in the right
+  // language and the prompt has nothing left to get wrong.
+  const language = resolveLanguage(input.language);
+  const spokenLanguage = normalizeLanguage(language);
 
-  return {
-    workerId: input.workerId,
-    shiftId: input.shiftId,
-    attemptId: input.attemptId,
-    language: resolveLanguage(input.language),
-    workerName: input.workerName ?? "",
+  const englishShift: ShiftDetails = {
     role: input.shift?.role ?? "",
     date: input.shift?.date ?? "",
     startTime: input.shift?.startTime ?? "",
     endTime: input.shift?.endTime ?? "",
     location: input.shift?.location ?? "",
-    pay,
-    maxPay: maxPayFor(pay),
+    pay: input.shift?.pay ?? "",
+  };
+
+  const localized = localizeShift(englishShift, spokenLanguage);
+
+  // The ceiling is spoken out loud the moment anyone negotiates, so it goes
+  // through the same translation — from the English source, never from the
+  // already-translated copy.
+  const maxPay = localizeShift(
+    { ...englishShift, pay: maxPayFor(englishShift.pay) },
+    spokenLanguage,
+  ).pay;
+
+  return {
+    workerId: input.workerId,
+    shiftId: input.shiftId,
+    attemptId: input.attemptId,
+    language,
+    workerName: input.workerName ?? "",
+    role: localized.role,
+    date: localized.date,
+    startTime: localized.startTime,
+    endTime: localized.endTime,
+    location: localized.location,
+    pay: localized.pay,
+    maxPay,
     payHeadroom: `$${maxPayIncrease()}`,
     venueName: VENUE_NAME,
   };

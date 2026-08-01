@@ -96,21 +96,45 @@ describe("what reaches the assistant", () => {
     endTime: "11:00 PM",
   };
 
-  const context = () =>
+  const context = (language = "Urdu") =>
     buildCallContext({
       workerId: "emp_ahmed",
       workerName: "Ahmed Khan",
-      language: "Urdu",
+      language,
       shiftId: "sh_1",
       attemptId: "att_1",
       shift,
     });
 
   it("puts every shift fact in the spoken greeting", () => {
-    const greeting = buildFirstMessage(context());
+    const greeting = buildFirstMessage(context("English"));
     for (const fact of ["Ahmed Khan", "Kitchen Assistant", "Friday, July 31", "6:00 PM", "11:00 PM", "$24"]) {
       expect(greeting).toContain(fact);
     }
+  });
+
+  it("hands the assistant facts already written in the worker's language", () => {
+    // The shift is stored once, in English. Translating it here rather than
+    // asking the assistant to do it is what stopped "un turno de Server ... con
+    // pago de $21 per hour" — the prompt tells it to state the facts exactly,
+    // so whatever it is given is what the worker hears.
+    const urdu = context("Urdu");
+    expect(urdu.role).not.toBe(shift.role);
+    expect(urdu.date).not.toMatch(/July/);
+    expect(urdu.pay).not.toMatch(/per hour/);
+
+    const spanish = context("Spanish");
+    expect(spanish.role).toBe("Asistente de Cocina");
+    expect(spanish.pay).toContain("por hora");
+    // Translated, never altered: same hour, same amount.
+    expect(spanish.pay).toContain("24");
+  });
+
+  it("leaves an English call in English", () => {
+    const english = context("English");
+    expect(english.role).toBe(shift.role);
+    expect(english.date).toBe(shift.date);
+    expect(english.pay).toBe(shift.pay);
   });
 
   it("never leaves a placeholder unfilled in the greeting or the prompt", () => {
@@ -124,12 +148,22 @@ describe("what reaches the assistant", () => {
   });
 
   it("sends the same facts as Vapi variableValues", () => {
-    const overrides = buildAssistantOverrides(context());
-    expect(overrides.variableValues.date).toBe("Friday, July 31");
-    expect(overrides.variableValues.startTime).toBe("6:00 PM");
-    expect(overrides.variableValues.endTime).toBe("11:00 PM");
-    expect(overrides.variableValues.pay).toBe("$24 per hour");
+    // Whatever the context resolved to — English here — is what goes over the
+    // wire. The point is that the two never diverge, not that they are English.
+    const resolved = context("English");
+    const overrides = buildAssistantOverrides(resolved);
+    expect(overrides.variableValues.date).toBe(resolved.date);
+    expect(overrides.variableValues.startTime).toBe(resolved.startTime);
+    expect(overrides.variableValues.endTime).toBe(resolved.endTime);
+    expect(overrides.variableValues.pay).toBe(resolved.pay);
     expect(overrides.variableValues.attemptId).toBe("att_1");
+  });
+
+  it("sends the translated facts through for a call that is not in English", () => {
+    const urdu = context("Urdu");
+    const overrides = buildAssistantOverrides(urdu);
+    expect(overrides.variableValues.date).toBe(urdu.date);
+    expect(overrides.variableValues.pay).toBe(urdu.pay);
   });
 
   it("takes the venue name from config rather than hardcoding it", () => {

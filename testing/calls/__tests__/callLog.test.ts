@@ -172,11 +172,16 @@ describe("a real run through the workflow", () => {
     const [entry] = await listCallLogs();
 
     expect(entry.assistantInput).toBeTruthy();
-    // The greeting and the system prompt, as sent — not a reconstruction.
-    expect(entry.assistantInput!.firstMessage).toContain("Kitchen Assistant");
-    expect(entry.assistantInput!.firstMessage).toContain("Friday, July 31");
-    expect(entry.assistantInput!.systemPrompt).toContain("$24 per hour");
-    expect(entry.assistantInput!.variableValues.attemptId).toBe(entry.attemptId);
+    // The greeting and the system prompt, as sent — not a reconstruction. The
+    // first worker on this roster is Spanish-speaking, so what was sent is the
+    // Spanish copy: the log has to show that, or it is no use for working out
+    // what a worker actually heard.
+    const { firstMessage, systemPrompt, variableValues } = entry.assistantInput!;
+    expect(firstMessage).toContain(variableValues.role);
+    expect(firstMessage).toContain(variableValues.date);
+    expect(systemPrompt).toContain(variableValues.pay);
+    expect(variableValues.role).toBe("Asistente de Cocina");
+    expect(variableValues.attemptId).toBe(entry.attemptId);
     expect(entry.assistantInput!.toolNames).toEqual([
       "accept_shift",
       "decline_shift",
