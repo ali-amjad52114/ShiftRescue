@@ -138,6 +138,34 @@ function localizeTime(time: string, language: SupportedLanguage): string {
   return time;
 }
 
+// Place names stay proper nouns, but a Latin-script name dropped into an Urdu
+// sentence reads as badly as an English word. Transliterate the few we use and
+// leave anything unknown alone.
+const PLACES: Record<string, Partial<Record<SupportedLanguage, string>>> = {
+  "san francisco": { urdu: "سان فرانسسکو", hindi: "सैन फ़्रांसिस्को" },
+  "oakland": { urdu: "اوکلینڈ", hindi: "ओकलैंड" },
+  "berkeley": { urdu: "برکلے", hindi: "बर्कले" },
+};
+
+// "Downtown San Francisco" -> "el centro de San Francisco".
+// The city is a proper noun and stays; "downtown" is an ordinary word and does
+// not belong in a Spanish sentence. Anything whose shape is not recognised
+// passes through untouched rather than being mangled.
+function localizeLocation(location: string, language: SupportedLanguage): string {
+  const value = location.trim();
+
+  const downtown = value.match(/^downtown\s+(.+)$/i) || value.match(/^(.+?)\s+downtown$/i);
+  if (downtown) {
+    const raw = downtown[1].trim();
+    const place = lookup(PLACES, raw, language) ?? raw;
+    if (language === "spanish") return `el centro de ${place}`;
+    if (language === "urdu") return `${place} کے مرکز`;
+    if (language === "hindi") return `${place} के केंद्र`;
+  }
+
+  return lookup(PLACES, value, language) ?? value;
+}
+
 export function localizeShift(
   shift: ShiftDetails,
   language: SupportedLanguage,
@@ -148,6 +176,7 @@ export function localizeShift(
     ...shift,
     role: localizeRole(shift.role, language),
     date: localizeDate(shift.date, language),
+    location: localizeLocation(shift.location, language),
     startTime: localizeTime(shift.startTime, language),
     endTime: localizeTime(shift.endTime, language),
     pay: localizePay(shift.pay, language),
