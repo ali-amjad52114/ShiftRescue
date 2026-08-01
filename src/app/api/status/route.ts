@@ -13,7 +13,10 @@ export async function GET() {
     shift: state.shift,
     currentWorker: currentWorker ? currentWorker.name : null,
     workerId: currentWorker ? currentWorker.id : null,
-    attemptId: state.activeAttemptId ?? null,
+    // activeAttemptId is deliberately NOT published. It is the one value that
+    // makes /api/vapi-result un-forgeable, and this route is public — anyone
+    // could read it mid-call and post a decision the worker never made. The
+    // operator override at /api/admin/decision reads it server-side instead.
     language: currentWorker ? currentWorker.language : null,
     timeline: state.timeline,
     proof: state.proof,

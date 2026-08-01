@@ -212,9 +212,11 @@ which is why they survived testing.
   unawaited promise. On Vercel that promise is killed when the response is sent,
   so on serverless the end-of-call webhook is doing all the real work. It is
   harmless but it is not the safety net the comment implies.
-- **`syncScheduleAssignment()`** in `src/lib/workflow/coverage.ts` is exported
-  and never called. An accepted rescue does not currently mark the shift covered
-  on the calendar.
+- **~~`syncScheduleAssignment()`~~** — fixed in the merge with `origin/main`.
+  There were two copies of this: an exported one in `coverage.ts` that nothing
+  called, and `assignOnSchedule()` in `actions.ts`. Only the `actions.ts` one
+  survives, and `handleVapiResult()` calls it, so an acceptance now marks the
+  shift covered on the calendar.
 - **The end-of-call hangup delay** was `silenceTimeoutSeconds: 20`, now 10 via
   `VAPI_SILENCE_TIMEOUT_SECONDS`. That is the timer that keeps a finished call
   open when neither side says anything.

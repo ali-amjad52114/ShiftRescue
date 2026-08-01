@@ -1,4 +1,4 @@
-import { getShift, assignShift, type ScheduledShift } from "../shifts/store";
+import { getShift, updateShift, type ScheduledShift } from "../shifts/store";
 import { spokenShiftWindow } from "../time/schedule";
 import { dialActiveWorker, type DecisionOptions } from "./actions";
 import { getWorkflowState, updateWorkflowState } from "./state";
@@ -17,6 +17,25 @@ const ACTIVE_STATUSES = new Set([
 
 export function isRescueActive(state: WorkflowState): boolean {
   return ACTIVE_STATUSES.has(state.status);
+}
+
+/**
+ * Hand the shift back when a rescue is cleared, so the gap the demo exists to
+ * close is there again. Without this, resetting leaves the shift covered and
+ * there is nothing left to rescue on the next run.
+ *
+ * Only ever undoes an assignment this run made: a shift somebody else has since
+ * been put on is left alone.
+ */
+export async function releaseRescuedShift(state: WorkflowState): Promise<void> {
+  const shiftId = state.shift?.id;
+  const workerId = state.shift?.assignedWorkerId;
+  if (!shiftId || !workerId) return;
+
+  const scheduled = await getShift(shiftId);
+  if (scheduled?.assignedEmployeeId !== workerId) return;
+
+  await updateShift(shiftId, { assignedEmployeeId: null });
 }
 
 function toWorkflowShift(shift: ScheduledShift): Shift {
@@ -61,8 +80,14 @@ export async function startCoverage(
     status: "SHIFT_CREATED",
     currentWorkerIndex: -1,
     currentWorkerId: null,
-    timeline: [],
-    transcript: [],
+    activeAttemptId: null,
+    timeline: [
+      {
+        id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        message: `Looking for cover for the ${shift.role} shift`,
+        timestamp: new Date().toISOString(),
+      },
+    ],
     proof: {},
   };
 
@@ -96,13 +121,6 @@ function event(message: string) {
   };
 }
 
-/**
- * Mirror an accepted rescue onto the schedule so the calendar shows the shift
- * as covered. Only ever writes an assignment the workflow actually recorded.
- */
-export async function syncScheduleAssignment(state: WorkflowState): Promise<void> {
-  const shiftId = state.shift?.id;
-  const workerId = state.shift?.assignedWorkerId;
-  if (!shiftId || !workerId) return;
-  await assignShift(shiftId, workerId);
-}
+// Mirroring an acceptance onto the schedule lives in actions.ts, next to the
+// decision that causes it — see assignOnSchedule(). Having a second copy here
+// meant the webhook route wrote the assignment twice.

@@ -171,6 +171,12 @@ export function buildAssistantOverrides(context: ShiftCallContext) {
   return {
     firstMessage: buildFirstMessage(context),
     ...buildMessagePlan(buildIdleMessages(context)),
+    // Belt and braces. The assistant-level config carries these too, but a
+    // dashboard-configured assistant that was never synced — or one still
+    // pointing at a previous tunnel — would otherwise deliver its transcript,
+    // tool calls and end-of-call report nowhere.
+    server: { url: toolServerUrl() },
+    serverMessages: ["transcript", "tool-calls", "status-update", "end-of-call-report"],
     variableValues: {
       workerId: context.workerId,
       shiftId: context.shiftId,
