@@ -20,6 +20,18 @@ export {
   parseVapiToolCall,
   parseVapiCallEnded,
   buildToolCallResponse,
+  checkConfirmation,
   isVapiToolCallPayload,
 } from "./webhook";
+export type { ConfirmationContext, GateOutcome, GateReason } from "./webhook";
+export {
+  readIntent,
+  normalizeUtterance,
+  isClearAffirmation,
+  isClearRefusal,
+  intentExamples,
+  intentExampleLine,
+  CLEAR_INTENT,
+} from "./intent";
+export type { WorkerIntent, IntentReading } from "./intent";
 export type * from "./types";

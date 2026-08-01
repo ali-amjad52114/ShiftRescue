@@ -1,3 +1,4 @@
+import { CLEAR_INTENT, readIntent, type WorkerIntent } from "./intent";
 import type {
   VapiCallEnded,
   VapiDecisionResult,
@@ -20,12 +21,95 @@ const DECISION_BY_TOOL: Record<string, WorkerDecision> = {
  */
 const SPOKEN_ACK: Record<WorkerDecision, string> = {
   accepted:
-    "Recorded. Say ONE short sentence confirming the date and start time and that a text is coming, then call the end call function immediately. Do not restate the shift, do not ask if they need anything else.",
+    "Recorded. Say ONE short sentence: thank them for confirming, name the role, date and start time, and say a confirmation text is on the way. Then call the end call function immediately. Do not repeat the pay, do not ask them to confirm again, do not ask if they need anything else.",
   declined:
     "Recorded. Say ONE short thank-you, then call the end call function immediately. Do not ask them to reconsider.",
   needs_clarification:
     "Logged. Say ONE short sentence that the team will follow up, then call the end call function immediately.",
 };
+
+/**
+ * What the model is told when the gate below refuses its decision. Same trick
+ * as SPOKEN_ACK: this comes back as a tool result, so it is the freshest thing
+ * in the model's context and outranks the system prompt for the next turn.
+ *
+ * Each one is an instruction to ask, never to assume — the gate's job is to buy
+ * one more question, not to decide the call itself.
+ */
+const GATE_INSTRUCTION: Record<GateReason, string> = {
+  "no-yes-heard":
+    "NOT RECORDED. The worker's last reply did not sound like an acceptance. Do not confirm the shift and do not say it is booked. Ask exactly once, in their language: \"Sorry, just to be clear — can you work this shift, yes or no?\" Wait for their answer, then call the tool that matches it.",
+  unsure:
+    "NOT RECORDED. The worker's last reply sounded undecided rather than a yes. Do not confirm the shift. Ask exactly once, in their language: \"Just to confirm — are you taking this shift?\" If they do not give a clear yes, call needs_clarification.",
+  "missed-yes":
+    "NOT LOGGED. The worker's last reply sounded like a yes. Ask exactly once, in their language: \"Just to confirm — you can work this shift?\" If they confirm, call accept_shift. If not, call needs_clarification again and close.",
+};
+
+export type GateReason = "no-yes-heard" | "unsure" | "missed-yes";
+
+export interface GateOutcome {
+  reason: GateReason;
+  /** What the worker actually said, as the transcriber heard it. */
+  reply: string;
+  intent: WorkerIntent;
+  confidence: number;
+}
+
+/**
+ * What the gate needs to know about the call so far. Supplied by the route,
+ * which reads it off the call log, so this module stays free of storage.
+ */
+export interface ConfirmationContext {
+  /** The last thing the worker said before the tool fired. */
+  lastWorkerReply?: string;
+  /** Whether the gate has already made this call ask again. It gets one turn. */
+  alreadyChallenged?: boolean;
+}
+
+/**
+ * The one check standing between "the model called accept_shift" and "a worker
+ * is on the roster".
+ *
+ * The model is the only thing that hears the call, and mostly it is right. But
+ * the two ways it goes wrong are not symmetric: recording an acceptance the
+ * worker never gave puts someone on a shift they will not turn up to, while
+ * missing one costs a phone call. So the gate is deliberately lopsided —
+ * an accept is checked against what the worker actually said, and everything
+ * else is left alone except a clear yes that got logged as a non-decision.
+ *
+ * It fires at most once per call. After that the model has been told to ask a
+ * plain yes/no question, and whatever comes back is taken at face value:
+ * a second challenge would just loop the worker through the same question.
+ */
+export function checkConfirmation(
+  decision: WorkerDecision,
+  context: ConfirmationContext | undefined,
+): GateOutcome | null {
+  const reply = context?.lastWorkerReply?.trim();
+  if (!reply || context?.alreadyChallenged) return null;
+
+  const reading = readIntent(reply);
+  if (reading.confidence < CLEAR_INTENT) return null;
+
+  const outcome = (reason: GateReason): GateOutcome => ({
+    reason,
+    reply,
+    intent: reading.intent,
+    confidence: reading.confidence,
+  });
+
+  if (decision === "accepted") {
+    if (reading.intent === "decline" || reading.intent === "stop") return outcome("no-yes-heard");
+    if (reading.intent === "unsure") return outcome("unsure");
+    return null;
+  }
+
+  if (decision === "needs_clarification" && reading.intent === "affirm") {
+    return outcome("missed-yes");
+  }
+
+  return null;
+}
 
 function parseArguments(raw: unknown): Record<string, unknown> {
   if (!raw) return {};
@@ -126,6 +210,14 @@ export type CallEndedHandler = (event: VapiCallEnded) => unknown;
 export interface VapiWebhookHandlers {
   onDecision: DecisionDeliverer;
   onCallEnded?: CallEndedHandler;
+  /**
+   * Supplies the gate with the worker's last words. Omit it and the gate never
+   * fires, which is the old behaviour: whatever tool the model called is what
+   * gets recorded.
+   */
+  confirmationContext?: (result: VapiDecisionResult) => Promise<ConfirmationContext | undefined>;
+  /** Called when the gate refuses a decision, so the refusal is on the record. */
+  onGateChallenge?: (result: VapiDecisionResult, outcome: GateOutcome) => unknown;
 }
 
 /**
@@ -156,6 +248,38 @@ export async function handleVapiWebhook(
       }
     }
     return { status: 200, body: { received: true } };
+  }
+
+  // Before anything is written down: does what the worker said match the tool
+  // the model reached for? If not, nothing is recorded and the model is sent
+  // back to ask one plain question.
+  if (handlers.confirmationContext) {
+    let challenge: GateOutcome | null = null;
+    try {
+      challenge = checkConfirmation(
+        parsed.result.decision,
+        await handlers.confirmationContext(parsed.result),
+      );
+    } catch {
+      // A gate that cannot read the transcript must not block a real decision.
+      challenge = null;
+    }
+
+    if (challenge) {
+      try {
+        await handlers.onGateChallenge?.(parsed.result, challenge);
+      } catch {
+        // Recording the challenge is a log line, not part of the call.
+      }
+      return {
+        status: 200,
+        body: {
+          results: [
+            { toolCallId: parsed.toolCallId, result: GATE_INSTRUCTION[challenge.reason] },
+          ],
+        },
+      };
+    }
   }
 
   try {

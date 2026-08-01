@@ -1,4 +1,4 @@
-import { buildBasePrompt, buildFirstMessage, buildShiftPrompt } from "./prompt";
+import { buildBasePrompt, buildFirstMessage, buildIdleMessages, buildShiftPrompt } from "./prompt";
 import { buildVapiTools, toolServerUrl } from "./tools";
 import type { ShiftCallContext } from "./types";
 
@@ -100,6 +100,30 @@ export const silenceTimeoutSeconds = Number(process.env.VAPI_SILENCE_TIMEOUT_SEC
 export const maxDurationSeconds = Number(process.env.VAPI_MAX_CALL_SECONDS ?? 300);
 
 /**
+ * What happens when the worker says nothing at all.
+ *
+ * A prompt cannot fix this on its own: with no transcript there is no turn, so
+ * the model is never asked to produce anything and the line simply goes quiet
+ * until silenceTimeoutSeconds hangs up on someone who was only reaching for a
+ * pen. Vapi's idle messages are the only thing that speaks into that gap, so
+ * "sorry, can you say that again?" belongs here rather than in the prompt.
+ *
+ * Twice is the limit. A third prompt into silence is a machine talking to an
+ * empty room, and the silence timeout ends the call more gracefully than that.
+ */
+export function buildMessagePlan(idleMessages: string[]) {
+  return {
+    messagePlan: {
+      idleMessages,
+      // Long enough to be a pause rather than an interruption. Vapi's floor is
+      // 5 seconds; below that it starts talking over people who are thinking.
+      idleTimeoutSeconds: Number(process.env.VAPI_IDLE_TIMEOUT_SECONDS ?? 7),
+      idleMessageMaxSpokenCount: Number(process.env.VAPI_IDLE_MAX_COUNT ?? 2),
+    },
+  };
+}
+
+/**
  * Assistant-level config: OpenAI for the brain, OpenAI transcription and voice
  * so English, Spanish, Urdu and Punjabi all run through one provider.
  */
@@ -126,6 +150,8 @@ export function buildAssistantConfig() {
     // Let the worker cut in mid-sentence, including over the greeting — someone
     // answering with "hello? who is this?" should be heard, not spoken over.
     ...buildSpeakingPlan(),
+    // English here; the per-call override replaces it with the worker's language.
+    ...buildMessagePlan(["Sorry, can you say that again?", "Are you still there?"]),
     firstMessageInterruptionsEnabled: true,
     // Strip background voices before the transcriber hears them.
     backgroundDenoisingEnabled: denoisingEnabled(),
@@ -144,6 +170,7 @@ export function buildAssistantConfig() {
 export function buildAssistantOverrides(context: ShiftCallContext) {
   return {
     firstMessage: buildFirstMessage(context),
+    ...buildMessagePlan(buildIdleMessages(context)),
     variableValues: {
       workerId: context.workerId,
       shiftId: context.shiftId,

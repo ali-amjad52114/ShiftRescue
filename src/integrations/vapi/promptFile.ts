@@ -22,6 +22,11 @@ export const PROMPT_PLACEHOLDERS = [
   "maxPay",
   "payHeadroom",
   "venueName",
+  // Generated from the lexicon in intent.ts, so the answers the model is told
+  // to accept are the same ones the confirmation gate can verify.
+  "yesWords",
+  "noWords",
+  "unsureWords",
 ] as const;
 
 export type PromptPlaceholder = (typeof PROMPT_PLACEHOLDERS)[number];

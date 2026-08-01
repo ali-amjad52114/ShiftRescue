@@ -26,6 +26,8 @@ export type CallLogEventType =
   | "call.failed"
   | "transcript"
   | "decision"
+  /** A decision the confirmation gate refused, with what the worker had said. */
+  | "decision.challenged"
   | "call.ended";
 
 export interface CallLogEvent {
