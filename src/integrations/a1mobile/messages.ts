@@ -100,7 +100,45 @@ function localizePay(pay: string, language: SupportedLanguage): string {
   return pay;
 }
 
-function localizeShift(
+export // "6:00 PM" -> "6:00 de la tarde" / "شام 6:00" / "शाम 6:00".
+// "PM" is an English token; leaving it in turned every Spanish call into a
+// mix of two languages.
+function localizeTime(time: string, language: SupportedLanguage): string {
+  const match = time.match(/^\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*$/i);
+  if (!match) return time;
+
+  let hour = Number(match[1]) % 12;
+  const minute = match[2] ?? "00";
+  const isPm = match[3].toLowerCase() === "pm";
+  if (isPm) hour += 12;
+
+  const clock = `${hour % 12 === 0 ? 12 : hour % 12}${minute === "00" ? "" : ":" + minute}`;
+  // Urdu and Hindi separate late afternoon from midday; Spanish runs "tarde"
+  // right through until night.
+  const partOfDay =
+    hour < 12 ? "morning" : hour < 16 ? "afternoon" : hour < 20 ? "evening" : "night";
+
+  if (language === "spanish") {
+    const es = {
+      morning: "de la mañana",
+      afternoon: "de la tarde",
+      evening: "de la tarde",
+      night: "de la noche",
+    }[partOfDay];
+    return `${clock} ${es}`;
+  }
+  if (language === "urdu") {
+    const ur = { morning: "صبح", afternoon: "دوپہر", evening: "شام", night: "رات" }[partOfDay];
+    return `${ur} ${clock}`;
+  }
+  if (language === "hindi") {
+    const hi = { morning: "सुबह", afternoon: "दोपहर", evening: "शाम", night: "रात" }[partOfDay];
+    return `${hi} ${clock}`;
+  }
+  return time;
+}
+
+export function localizeShift(
   shift: ShiftDetails,
   language: SupportedLanguage,
 ): ShiftDetails {
@@ -110,6 +148,8 @@ function localizeShift(
     ...shift,
     role: localizeRole(shift.role, language),
     date: localizeDate(shift.date, language),
+    startTime: localizeTime(shift.startTime, language),
+    endTime: localizeTime(shift.endTime, language),
     pay: localizePay(shift.pay, language),
   };
 }

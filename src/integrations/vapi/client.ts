@@ -10,6 +10,7 @@ import {
   formatSpokenTime,
 } from "../../lib/time/schedule";
 import { resolveLanguage } from "./prompt";
+import { localizeShift, normalizeLanguage } from "../a1mobile/messages";
 import type {
   ShiftCallContext,
   StartVapiShiftCallInput,
@@ -33,6 +34,24 @@ export function buildShiftCallContext(input: StartVapiShiftCallInput): ShiftCall
   const spoken = (pre: string | undefined, iso: string | undefined, format: typeof formatSpokenTime) =>
     pre || (iso ? format(iso, zone) : "");
 
+  // The backend holds one English copy of the shift. Handing that straight to
+  // a Spanish call produced "un turno de Server ... con pago de $21 per hour":
+  // the assistant was told to state the facts exactly, so it read the English.
+  // Translate them here, the same way the confirmation SMS already does, so
+  // what reaches the call is already in the right language.
+  const language = resolveLanguage(input.language);
+  const localized = localizeShift(
+    {
+      role: input.shift.role,
+      date: spoken(input.shift.date, startsAt, formatSpokenDate),
+      startTime: spoken(input.shift.startTime, startsAt, formatSpokenTime),
+      endTime: spoken(input.shift.endTime, endsAt, formatSpokenTime),
+      location: input.shift.location,
+      pay: input.shift.pay,
+    },
+    normalizeLanguage(language),
+  );
+
   return {
     workerId: input.workerId,
     shiftId: input.shift.id,
@@ -40,13 +59,13 @@ export function buildShiftCallContext(input: StartVapiShiftCallInput): ShiftCall
       input.attemptId ??
       `att_${input.workerId}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
     workerName: input.workerName,
-    language: resolveLanguage(input.language),
-    role: input.shift.role,
-    date: spoken(input.shift.date, startsAt, formatSpokenDate),
-    startTime: spoken(input.shift.startTime, startsAt, formatSpokenTime),
-    endTime: spoken(input.shift.endTime, endsAt, formatSpokenTime),
-    location: input.shift.location,
-    pay: input.shift.pay,
+    language,
+    role: localized.role,
+    date: localized.date,
+    startTime: localized.startTime,
+    endTime: localized.endTime,
+    location: localized.location,
+    pay: localized.pay,
   };
 }
 
