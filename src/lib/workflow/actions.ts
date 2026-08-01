@@ -12,6 +12,7 @@ import {
 import { settleAgreedPay } from "../../integrations/vapi/pay";
 import { closeCallLog, recordCallEvent } from "../calls/log";
 import { assignShift, createShift, listShifts, type ScheduledShift } from "../shifts/store";
+import { callableEmployees } from "../employees/store";
 import { getWorkflowState, updateWorkflowState } from "./state";
 import type { Shift, WorkerDecision, WorkflowState } from "./types";
 
@@ -173,7 +174,10 @@ export async function beginCalling(
     state.currentWorkerIndex = -1;
     state.currentWorkerId = null;
     state.activeAttemptId = null;
-    addTimelineEntry(state, "No active staff on the roster to call.");
+    // "eligible", not just "active": a replacement run excludes whoever is
+    // already on the shift, so the roster can be non-empty and still have
+    // nobody left to ring.
+    addTimelineEntry(state, "No eligible active staff on the roster to call.");
     return updateWorkflowState(state);
   }
 
@@ -367,6 +371,11 @@ export async function handleVoiceosCommand(payload: {
   };
 
   state.shift = shift;
+  // A new manager command is ordinary coverage, even if the previous run was
+  // a replacement. Rebuild from the source roster so an old exclusion cannot
+  // leak into this run through hydrated workflow state.
+  state.workers = await callableEmployees();
+  state.excludedWorkerIds = [];
   state.status = "SHIFT_CREATED";
   state.timeline = [];
   state.proof = {};

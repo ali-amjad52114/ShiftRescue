@@ -21,6 +21,7 @@ function createInitialState(workers: WorkflowState["workers"]): WorkflowState {
     status: "WAITING_FOR_MANAGER_COMMAND",
     shift: null,
     workers,
+    excludedWorkerIds: [],
     currentWorkerIndex: -1,
     currentWorkerId: null,
     activeAttemptId: null,
@@ -41,11 +42,21 @@ const globalForWorkflow = globalThis as unknown as {
  * the index re-derived, so adding or removing an employee mid-run cannot make
  * the workflow call the wrong person.
  */
+// The roster is passed in rather than read here, so the caller can fetch it
+// alongside the stored state instead of after it. This sits on the tool-webhook
+// path, where a serial Redis round trip is silence the worker hears mid-call.
 function hydrate(
   stored: WorkflowState | null,
-  workers: WorkflowState["workers"],
+  roster: WorkflowState["workers"],
 ): WorkflowState {
-  if (!stored) return createInitialState(workers);
+  if (!stored) return createInitialState(roster);
+
+  // Older persisted states predate replacement exclusions, so default safely
+  // to the full roster. For replacement runs the exclusion must be reapplied on
+  // every read because workers themselves are deliberately not persisted.
+  const excludedWorkerIds = stored.excludedWorkerIds ?? [];
+  const excluded = new Set(excludedWorkerIds);
+  const workers = roster.filter((worker) => !excluded.has(worker.id));
 
   const index = stored.currentWorkerId
     ? workers.findIndex((w) => w.id === stored.currentWorkerId)
@@ -54,6 +65,7 @@ function hydrate(
   return {
     ...stored,
     workers,
+    excludedWorkerIds,
     currentWorkerIndex: index,
     activeAttemptId: stored.activeAttemptId ?? null,
   };

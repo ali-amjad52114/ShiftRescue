@@ -881,19 +881,22 @@ body {
 
 .calendar {
   display: flex;
-  gap: var(--spacing-12);
+  gap: var(--spacing-16);
   background: var(--surface-paper-white);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-cards);
-  padding: var(--spacing-20);
+  padding: var(--spacing-16) var(--spacing-20) var(--spacing-20);
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-deep-forest) var(--color-pale-sage);
 }
 
 .calendar-hours {
   position: relative;
   flex: none;
-  width: 52px;
-  margin-top: 52px;
-  height: 620px;
+  width: 44px;
+  margin-top: 48px;
+  height: 576px;
 }
 
 .calendar-hour {
@@ -903,22 +906,28 @@ body {
   font-size: var(--text-caption);
   color: var(--color-charcoal);
   font-variant-numeric: tabular-nums;
+  opacity: 0.68;
 }
 
 .calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: var(--spacing-8);
+  gap: 0;
   flex: 1;
-  min-width: 0;
+  min-width: 980px;
 }
+
+.calendar-day { min-width: 0; }
+
+.calendar-day + .calendar-day { border-left: 1px solid var(--hairline); }
 
 .calendar-day-head {
   display: flex;
   align-items: baseline;
+  justify-content: center;
   gap: var(--spacing-8);
-  height: 52px;
-  padding-bottom: var(--spacing-12);
+  height: 48px;
+  padding: 0 var(--spacing-8) var(--spacing-12);
 }
 
 .calendar-day-name {
@@ -926,6 +935,7 @@ body {
   letter-spacing: var(--tracking-caption);
   text-transform: uppercase;
   color: var(--color-charcoal);
+  font-weight: var(--font-weight-medium);
 }
 
 .calendar-day-num {
@@ -940,11 +950,14 @@ body {
   padding: 0 var(--spacing-8);
 }
 
+.calendar-day-today .calendar-slots {
+  background-color: rgba(200, 241, 105, 0.08);
+}
+
 .calendar-slots {
   position: relative;
-  height: 620px;
+  height: 576px;
   border-top: 1px solid var(--hairline);
-  border-left: 1px solid var(--hairline);
   background-image: repeating-linear-gradient(
     to bottom,
     transparent,
@@ -972,27 +985,32 @@ body {
   right: 2px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: var(--spacing-8);
+  gap: 3px;
+  padding: 7px 8px;
   border-radius: var(--radius-buttons);
   text-align: left;
   overflow: hidden;
   cursor: pointer;
   font-family: var(--font-graphik);
   border: 1px solid transparent;
-  transition: filter 0.15s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
-.shift-block:hover { filter: brightness(0.97); z-index: 40 !important; }
+.shift-block:hover {
+  border-color: var(--color-deep-forest);
+  z-index: 5 !important;
+}
 
 .shift-block-time {
-  font-size: var(--text-caption);
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
   opacity: 0.75;
+  white-space: nowrap;
 }
 
 .shift-block-role {
-  font-size: var(--text-body-sm);
+  font-size: 13px;
+  line-height: 1.18;
   font-weight: var(--font-weight-medium);
   /* Two lines rather than a one-line ellipsis: "Kitchen ..." told nobody
      anything, and there is vertical room inside a shift block. */
@@ -1004,10 +1022,25 @@ body {
 }
 
 .shift-block-person {
-  font-size: var(--text-caption);
+  font-size: 11px;
+  line-height: 1.2;
   opacity: 0.85;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shift-block-dense {
+  padding: 6px;
+}
+
+.shift-block-dense .shift-block-time,
+.shift-block-dense .shift-block-person {
+  font-size: 10px;
+}
+
+.shift-block-dense .shift-block-role {
+  font-size: 12px;
 }
 
 .shift-block-covered {
@@ -1066,7 +1099,7 @@ body {
 
 .shift-block-selected {
   outline: 2px solid var(--color-ink-black);
-  outline-offset: 1px;
+  outline-offset: -1px;
 }
 
 /* ----------------------------------------------------------- Detail panel */
@@ -1586,12 +1619,6 @@ body {
   border-color: var(--color-ink-black);
 }
 
-.shift-block-open .shift-block-person {
-  color: var(--color-chartreuse-lime);
-  opacity: 1;
-  font-weight: var(--font-weight-medium);
-}
-
 .calendar-empty {
   display: flex;
   flex-direction: column;
@@ -1636,9 +1663,24 @@ body {
 .shift-block-role-bartender.shift-block-open,
 .shift-block-role-manager.shift-block-open,
 .shift-block-role-default.shift-block-open {
+  background: var(--color-paper-white);
+  color: var(--color-ink-black);
+  border: 1px dashed var(--color-ink-black);
+  border-left: 4px solid var(--color-chartreuse-lime);
+}
+
+.shift-block-open .shift-block-person {
+  display: inline-flex;
+  align-self: flex-start;
+  width: auto;
+  margin-top: 2px;
+  padding: 2px 5px;
+  border-radius: var(--radius-buttons);
   background: var(--color-ink-black);
   color: var(--color-paper-white);
-  border-left: 3px solid var(--color-chartreuse-lime);
+  opacity: 1;
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.02em;
 }
 
 
