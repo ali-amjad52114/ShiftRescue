@@ -378,6 +378,7 @@ export async function handleVoiceosCommand(payload: {
   state.excludedWorkerIds = [];
   state.status = "SHIFT_CREATED";
   state.timeline = [];
+  state.transcript = [];
   state.proof = {};
   state.activeAttemptId = null;
 

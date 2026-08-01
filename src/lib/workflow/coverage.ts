@@ -121,6 +121,10 @@ export async function startCoverage(
         timestamp: new Date().toISOString(),
       },
     ],
+    // The conversation belongs to the call that is starting now. Carrying the
+    // previous run's lines over showed a stale transcript on the dashboard the
+    // moment a new rescue began.
+    transcript: [],
     proof: {},
   };
 
