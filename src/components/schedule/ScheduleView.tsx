@@ -195,14 +195,14 @@ export function ScheduleView() {
     .filter((s) => !s.assignedEmployeeId && !(rescue.active && rescue.shiftId === s.id))
     .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
 
-  const findCoverage = async (shiftId: string) => {
+  const findCoverage = async (shiftId: string, replacement = false) => {
     setBusyId(shiftId);
     setError(null);
     try {
       const res = await fetch("/api/coverage", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ shiftId }),
+        body: JSON.stringify({ shiftId, replacement }),
       });
       const json = await res.json();
       if (!res.ok) setError(json.error ?? "Could not start looking for cover");
@@ -234,22 +234,7 @@ export function ScheduleView() {
   };
 
   const markUnfulfilledAndRescue = async (shiftId: string) => {
-    setBusyId(shiftId);
-    setError(null);
-    try {
-      // Unassign first so it reflects as unassigned/open in calendar
-      await fetch(`/api/shifts/${shiftId}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ assignedEmployeeId: null }),
-      });
-      // Then launch rescue workflow
-      await findCoverage(shiftId);
-    } catch {
-      setError("Could not unassign and start rescue");
-    } finally {
-      setBusyId(null);
-    }
+    await findCoverage(shiftId, true);
   };
 
   const shortDay = (key: string) =>
@@ -487,25 +472,29 @@ export function ScheduleView() {
                     return (
                       <button
                         key={shift.id}
-                        className={`shift-block shift-block-${state} shift-block-role-${roleClass}${selectedId === shift.id ? " shift-block-selected" : ""}`}
+                        className={`shift-block shift-block-${state} shift-block-role-${roleClass}${lanes > 1 ? " shift-block-dense" : ""}${selectedId === shift.id ? " shift-block-selected" : ""}`}
                         style={(() => {
-                          const width = Math.max(1 / lanes, 0.62);
-                          const step = lanes > 1 ? (1 - width) / (lanes - 1) : 0;
+                          // Divide overlaps into real columns. The old minimum
+                          // width made neighboring shifts cover one another.
+                          const laneWidth = 100 / lanes;
                           return {
                             top: `${top * 100}%`,
-                            height: `${Math.max(6, (bottom - top) * 100)}%`,
-                            left: `calc(${lane * step * 100}% + 2px)`,
-                            width: `calc(${width * 100}% - 4px)`,
+                            height: `${Math.max(5, (bottom - top) * 100)}%`,
+                            left: `calc(${lane * laneWidth}% + 3px)`,
+                            width: `calc(${laneWidth}% - 6px)`,
                             right: "auto",
                             // A shift with nobody on it must never be hidden
                             // behind a covered one that happens to cascade over
                             // it — it is the whole point of the screen.
-                            zIndex: state === "open" ? 30 : state === "filling" ? 20 : lane + 1,
+                            zIndex: selectedId === shift.id ? 10 : 1,
                           };
                         })()}
                         onClick={() => setSelectedId(shift.id === selectedId ? null : shift.id)}
+                        aria-label={`${shift.role}, ${formatRange(shift.startsAt, shift.endsAt, timeZone)}, ${person?.name ?? (isFilling ? "finding coverage" : "open shift")}`}
                       >
-                        <span className="shift-block-time">{formatTime(shift.startsAt, timeZone)}</span>
+                        <span className="shift-block-time">
+                          {lanes > 1 ? formatTime(shift.startsAt, timeZone) : formatRange(shift.startsAt, shift.endsAt, timeZone)}
+                        </span>
                         <span className="shift-block-role">{shift.role}</span>
                         {/* An unfilled block is solid ink among pale ones and is
                             listed at the top of the page, so the word would be a
@@ -517,7 +506,7 @@ export function ScheduleView() {
                           ) : isFilling ? (
                             `Calling ${(rescue.callingName ?? "").split(" ")[0] || "…"}`
                           ) : (
-                            <span className="visually-hidden">Unfilled</span>
+                            "Open shift"
                           )}
                         </span>
                       </button>

@@ -79,6 +79,8 @@ export interface WorkflowState {
   status: WorkflowStatus;
   shift: Shift | null;
   workers: Worker[];
+  /** Employees who must not be contacted during this rescue, such as the person being replaced. */
+  excludedWorkerIds: string[];
   currentWorkerIndex: number;
   currentWorkerId: string | null;
   /** Only a decision from this server-generated call attempt may mutate the run. */

@@ -21,6 +21,7 @@ function createInitialState(workers: WorkflowState["workers"]): WorkflowState {
     status: "WAITING_FOR_MANAGER_COMMAND",
     shift: null,
     workers,
+    excludedWorkerIds: [],
     currentWorkerIndex: -1,
     currentWorkerId: null,
     activeAttemptId: null,
@@ -42,8 +43,15 @@ const globalForWorkflow = globalThis as unknown as {
  * the workflow call the wrong person.
  */
 async function hydrate(stored: WorkflowState | null): Promise<WorkflowState> {
-  const workers = await callableEmployees();
-  if (!stored) return createInitialState(workers);
+  const roster = await callableEmployees();
+  if (!stored) return createInitialState(roster);
+
+  // Older persisted states predate replacement exclusions, so default safely
+  // to the full roster. For replacement runs the exclusion must be reapplied on
+  // every read because workers themselves are deliberately not persisted.
+  const excludedWorkerIds = stored.excludedWorkerIds ?? [];
+  const excluded = new Set(excludedWorkerIds);
+  const workers = roster.filter((worker) => !excluded.has(worker.id));
 
   const index = stored.currentWorkerId
     ? workers.findIndex((w) => w.id === stored.currentWorkerId)
@@ -52,6 +60,7 @@ async function hydrate(stored: WorkflowState | null): Promise<WorkflowState> {
   return {
     ...stored,
     workers,
+    excludedWorkerIds,
     currentWorkerIndex: index,
     activeAttemptId: stored.activeAttemptId ?? null,
   };

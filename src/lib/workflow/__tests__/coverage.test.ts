@@ -79,6 +79,51 @@ describe("Coverage from the schedule", () => {
     await expect(startCoverage(covered.id)).rejects.toThrow("already covered");
   });
 
+  it("should exclude the original assignee from a replacement run", async () => {
+    const covered = await createShift({
+      role: "Kitchen Assistant",
+      startsAt: new Date(Date.now() + 30 * 60 * 60 * 1000).toISOString(),
+      endsAt: new Date(Date.now() + 36 * 60 * 60 * 1000).toISOString(),
+      assignedEmployeeId: "emp_maria",
+    });
+
+    const started = await startCoverage(covered.id, { replacement: true });
+
+    expect(started.currentWorkerId).toBe("emp_ahmed");
+    expect(started.excludedWorkerIds).toEqual(["emp_maria"]);
+    expect(started.workers.map((worker) => worker.id)).toEqual(["emp_ahmed", "emp_john"]);
+    expect((await getShift(covered.id))?.assignedEmployeeId).toBeNull();
+    expect(started.timeline.some((event) => event.message.includes("Maria Alvarez"))).toBe(false);
+  });
+
+  it("should keep the original assignee excluded after state hydration and a decline", async () => {
+    const covered = await createShift({
+      role: "Kitchen Assistant",
+      startsAt: new Date(Date.now() + 30 * 60 * 60 * 1000).toISOString(),
+      endsAt: new Date(Date.now() + 36 * 60 * 60 * 1000).toISOString(),
+      assignedEmployeeId: "emp_maria",
+    });
+
+    const started = await startCoverage(covered.id, { replacement: true });
+    const hydrated = await getWorkflowState();
+    expect(hydrated.workers.map((worker) => worker.id)).toEqual(["emp_ahmed", "emp_john"]);
+
+    const advanced = await handleVapiResult({
+      workerId: started.currentWorkerId!,
+      attemptId: started.activeAttemptId!,
+      decision: "declined",
+    });
+
+    expect(advanced.currentWorkerId).toBe("emp_john");
+    expect(advanced.timeline.some((event) => event.message.includes("Calling Maria Alvarez"))).toBe(false);
+  });
+
+  it("should require an assignee when replacement mode is requested", async () => {
+    await expect(startCoverage(openShiftId, { replacement: true })).rejects.toThrow(
+      "nobody assigned to replace",
+    );
+  });
+
   it("should refuse a shift that does not exist", async () => {
     await expect(startCoverage("sh_nope")).rejects.toThrow("No shift with id");
   });

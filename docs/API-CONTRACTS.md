@@ -33,6 +33,15 @@ mirror ids and never changes whether the shift is covered. Its rail step stays
 Refuses with 400 when the shift is already covered, does not exist, or another
 rescue is in flight. The engine holds one run at a time.
 
+To replace the person currently assigned to a covered shift:
+
+```json
+{ "shiftId": "sh_a1b2c3d4", "replacement": true }
+```
+
+The backend captures and unassigns the current employee, then excludes that
+employee for the entire rescue. Replacement mode refuses an already-open shift.
+
 ## Manager command
 
 `POST /api/voiceos-command`

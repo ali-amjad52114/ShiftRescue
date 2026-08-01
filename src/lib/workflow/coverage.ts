@@ -1,4 +1,5 @@
 import { getShift, updateShift, type ScheduledShift } from "../shifts/store";
+import { callableEmployees } from "../employees/store";
 import { beginCalling } from "./actions";
 import { getWorkflowState, updateWorkflowState } from "./state";
 import type { Shift, WorkflowState } from "./types";
@@ -56,19 +57,51 @@ function toWorkflowShift(shift: ScheduledShift): Shift {
  * The engine holds one run at a time, so a second request while a rescue is in
  * flight is refused rather than silently replacing the run in progress.
  */
-export async function startCoverage(shiftId: string): Promise<WorkflowState> {
+export interface StartCoverageOptions {
+  replacement?: boolean;
+}
+
+export async function startCoverage(
+  shiftId: string,
+  options: StartCoverageOptions = {},
+): Promise<WorkflowState> {
   const shift = await getShift(shiftId);
   if (!shift) throw new Error(`No shift with id ${shiftId}`);
-  if (shift.assignedEmployeeId) throw new Error("That shift is already covered");
+
+  const replacedWorkerId = options.replacement ? shift.assignedEmployeeId : null;
+  if (options.replacement && !replacedWorkerId) {
+    throw new Error("That shift has nobody assigned to replace");
+  }
+  if (!options.replacement && shift.assignedEmployeeId) {
+    throw new Error("That shift is already covered");
+  }
 
   const state = await getWorkflowState();
   if (isRescueActive(state) && state.shift?.id !== shiftId) {
     throw new Error("A rescue is already running for another shift");
   }
 
+  const excludedWorkerIds = replacedWorkerId ? [replacedWorkerId] : [];
+  const excluded = new Set(excludedWorkerIds);
+  const workers = (await callableEmployees()).filter((worker) => !excluded.has(worker.id));
+
+  // Capture the assignee before opening the shift. Keeping this inside the
+  // coverage operation prevents the browser from erasing the only record of
+  // who must be excluded before the call queue is built.
+  if (replacedWorkerId) {
+    await updateShift(shiftId, { assignedEmployeeId: null });
+  }
+
+  const workflowShift = toWorkflowShift({
+    ...shift,
+    assignedEmployeeId: null,
+  });
+
   const next: WorkflowState = {
     ...state,
-    shift: toWorkflowShift(shift),
+    shift: workflowShift,
+    workers,
+    excludedWorkerIds,
     status: "SHIFT_CREATED",
     currentWorkerIndex: -1,
     currentWorkerId: null,
@@ -76,7 +109,9 @@ export async function startCoverage(shiftId: string): Promise<WorkflowState> {
     timeline: [
       {
         id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-        message: `Looking for cover for the ${shift.role} shift`,
+        message: replacedWorkerId
+          ? `Looking for a replacement for the ${shift.role} shift`
+          : `Looking for cover for the ${shift.role} shift`,
         timestamp: new Date().toISOString(),
       },
     ],

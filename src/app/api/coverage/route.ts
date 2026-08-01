@@ -10,7 +10,9 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const state = await startCoverage(body?.shiftId);
+    const state = await startCoverage(body?.shiftId, {
+      replacement: body?.replacement === true,
+    });
     return NextResponse.json({ success: true, state: publicWorkflowState(state) });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not start coverage";
