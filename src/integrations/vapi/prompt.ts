@@ -45,10 +45,10 @@ function promptValues(context: ShiftCallContext): Record<string, string> {
  * working call rather than a silent one.
  */
 const DEFAULT_GREETINGS: Record<SupportedLanguage, string> = {
-  English: `Hi {{workerName}}, this is the {{venueName}} scheduling team. We have a {{role}} shift on {{date}}, {{startTime}} to {{endTime}}, at {{location}}, paying {{pay}}. Do you have a minute?`,
-  Spanish: `Hola {{workerName}}, soy del equipo de horarios de {{venueName}}. Tenemos un turno de {{role}} el {{date}}, de {{startTime}} a {{endTime}}, en {{location}}, con pago de {{pay}}. Tiene un momento?`,
-  Urdu: `Assalam o alaikum {{workerName}}, main {{venueName}} scheduling team se baat kar raha hoon. {{role}} ki shift {{date}} ko {{startTime}} se {{endTime}} tak {{location}} par hai, aur tankhwa {{pay}} hai. Kya abhi aik minute hai?`,
-  Punjabi: `Sat sri akal {{workerName}}, main {{venueName}} scheduling team ton gall kar riha haan. {{role}} di shift {{date}} nu {{startTime}} ton {{endTime}} tak {{location}} te hai, te pay {{pay}} hai. Ki hun ik minute hai?`,
+  English: `Hi {{workerName}}, this is the {{venueName}} scheduling team. We have a {{role}} shift on {{date}}, {{startTime}} to {{endTime}}, at {{location}}, paying {{pay}}.`,
+  Spanish: `Hola {{workerName}}, soy del equipo de horarios de {{venueName}}. Tenemos un turno de {{role}} el {{date}}, de {{startTime}} a {{endTime}}, en {{location}}, con pago de {{pay}}.`,
+  Urdu: `Assalam o alaikum {{workerName}}, main {{venueName}} scheduling team se baat kar raha hoon. {{role}} ki shift {{date}} ko {{startTime}} se {{endTime}} tak {{location}} par hai, aur tankhwa {{pay}} hai.`,
+  Punjabi: `Sat sri akal {{workerName}}, main {{venueName}} scheduling team ton gall kar riha haan. {{role}} di shift {{date}} nu {{startTime}} ton {{endTime}} tak {{location}} te hai, te pay {{pay}} hai.`,
 };
 
 /**

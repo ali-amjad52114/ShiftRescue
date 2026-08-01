@@ -146,7 +146,7 @@ export function buildAssistantConfig() {
       voiceId: process.env.VAPI_OPENAI_VOICE || "alloy",
     },
     firstMessage:
-      "Hi, this is the scheduling team calling to check your availability for a shift. Do you have a minute?",
+      "Hi, this is the scheduling team calling to check your availability for a shift.",
     // Let the worker cut in mid-sentence, including over the greeting — someone
     // answering with "hello? who is this?" should be heard, not spoken over.
     ...buildSpeakingPlan(),
