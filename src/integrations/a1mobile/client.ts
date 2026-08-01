@@ -72,6 +72,30 @@ async function a1Fetch<T>(
   }
 }
 
+/**
+ * Numbers a1mobile will let us dial. Only OTP-verified numbers may be called,
+ * so a roster entry missing from this list can never produce a conversation —
+ * it rings, the carrier answers, and the call dies in silence. Worth knowing
+ * before a demo rather than during one.
+ */
+export async function listVerifiedNumbers(): Promise<
+  { ok: true; numbers: string[] } | { ok: false; error: string }
+> {
+  const key = teamKey();
+  if (!key) return { ok: false, error: "no a1mobile team key" };
+
+  try {
+    const response = await fetch(`${A1_BASE_URL}/api/verified-numbers`, {
+      headers: { "X-Team-Key": key },
+    });
+    if (!response.ok) return { ok: false, error: `a1mobile ${response.status}` };
+    const data = (await response.json()) as { verified_numbers?: string[] };
+    return { ok: true, numbers: data.verified_numbers ?? [] };
+  } catch (error) {
+    return { ok: false, error: String(error) };
+  }
+}
+
 export async function claimA1MobileNumber(): Promise<
   A1MobileResult & { number?: A1MobileClaimedNumber }
 > {

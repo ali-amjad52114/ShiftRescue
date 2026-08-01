@@ -3,6 +3,7 @@ import { isAuthenticated } from "@/lib/auth/session";
 import { toolServerUrl } from "@/integrations/vapi";
 import { callableEmployees, listEmployees } from "@/lib/employees/store";
 import { storageMode } from "@/lib/redis";
+import { listVerifiedNumbers } from "@/integrations/a1mobile/client";
 import { listShifts } from "@/lib/shifts/store";
 import { DEFAULT_TIME_ZONE } from "@/lib/time/schedule";
 
@@ -22,12 +23,22 @@ export async function GET() {
   const webhook = toolServerUrl();
   const webhookIsPublic = !webhook.startsWith("http://localhost");
 
-  const [roster, callable, shifts, signedIn] = await Promise.all([
+  const [roster, callable, shifts, signedIn, verified] = await Promise.all([
     listEmployees(),
     callableEmployees(),
     listShifts(),
     isAuthenticated(),
+    listVerifiedNumbers(),
   ]);
+
+  // a1mobile only connects OTP-verified numbers. An unverified one rings, gets
+  // answered by the carrier and then sits in silence until the call times out,
+  // which is indistinguishable from a worker ignoring the phone.
+  const digits = (value: string) => value.replace(/\D/g, "");
+  const verifiedSet = verified.ok ? new Set(verified.numbers.map(digits)) : null;
+  const unverified = verifiedSet
+    ? callable.filter((e) => e.phone.trim() !== "" && !verifiedSet.has(digits(e.phone))).length
+    : 0;
 
   // callableEmployees() deliberately keeps people with no number on the roster —
   // the call layer reports that honestly rather than hiding them. For a demo it
@@ -58,6 +69,8 @@ export async function GET() {
     realCallsEnabled: process.env.SIMULATE !== "true",
     outboundDialling: process.env.ORIGINATION !== "inbound",
     rosterCallable: reachable > 0 && reachable === callable.length,
+    // Unknown when a1mobile cannot be reached; do not fail the check on that.
+    rosterVerified: verifiedSet === null ? true : unverified === 0,
     haveShiftToRescue: openUpcoming > 0,
   };
 
